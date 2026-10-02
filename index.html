@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1412">
+<title>Holdem Lab</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="홀덤 랩">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="brand-mark">HOLDEM</span><span class="brand-sub">LAB</span></div>
+  <div class="top-r"><span class="goal-mini" id="goalMini">0/30</span><div class="deck-src" id="deckSrc"><i></i><span>—</span></div><button type="button" class="guide-btn" id="guideBtn">가이드</button></div>
+</header>
+
+<main id="main">
+  <section class="tab" id="tab-pot" data-tab="pot">
+    <div class="stats" data-stats="pot"></div>
+    <div class="qroot"></div>
+    <button type="button" class="primary" disabled>정답 확인</button>
+    <div class="explain" hidden></div>
+  </section>
+  <section class="tab" id="tab-outs" data-tab="outs">
+    <div class="stats" data-stats="outs"></div>
+    <div class="qroot"></div>
+    <button type="button" class="primary" disabled>정답 확인</button>
+    <div class="explain" hidden></div>
+  </section>
+  <section class="tab" id="tab-pre" data-tab="pre">
+    <div class="stats" data-stats="pre"></div>
+    <div class="qroot"></div>
+    <button type="button" class="primary" disabled>정답 확인</button>
+    <div class="explain" hidden></div>
+  </section>
+  <section class="tab" id="tab-pos" data-tab="pos">
+    <div class="stats" data-stats="pos"></div>
+    <div class="type-chips sub" id="posKinds"></div>
+    <div class="qroot"></div>
+    <button type="button" class="primary" disabled>정답 확인</button>
+    <div class="explain" hidden></div>
+  </section>
+  <section class="tab" id="tab-mu" data-tab="mu">
+    <div class="stats" data-stats="mu"></div>
+    <div class="qroot"></div>
+    <button type="button" class="primary" disabled>정답 확인</button>
+    <div class="explain" hidden></div>
+  </section>
+  <section class="tab" id="tab-guide" data-tab="guide"><div id="guide"></div></section>
+  <section class="tab" id="tab-ch" data-tab="ch">
+    <div id="chHome"></div>
+    <div id="chRun" hidden></div>
+    <div id="chEnd" hidden></div>
+  </section>
+</main>
+
+<div id="fb" class="fb" hidden></div>
+
+<nav class="tabs" id="tabs">
+  <button type="button" data-go="pot"><span class="n">01</span><span class="t">팟 오즈</span><span class="acc" data-acc="pot">–</span></button>
+  <button type="button" data-go="outs"><span class="n">02</span><span class="t">아웃츠</span><span class="acc" data-acc="outs">–</span></button>
+  <button type="button" data-go="pre"><span class="n">03</span><span class="t">프리플랍</span><span class="acc" data-acc="pre">–</span></button>
+  <button type="button" data-go="pos"><span class="n">04</span><span class="t">포지션</span><span class="acc" data-acc="pos">–</span></button>
+  <button type="button" data-go="mu"><span class="n">05</span><span class="t">매치업</span><span class="acc" data-acc="mu">–</span></button>
+  <button type="button" data-go="ch"><span class="n">06</span><span class="t">챌린지</span><span class="acc" data-acc="ch">–</span></button>
+</nav>
+
+<script src="engine.js"></script>
+<script src="guide.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

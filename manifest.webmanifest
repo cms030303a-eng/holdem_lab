@@ -1,0 +1,30 @@
+{
+  "name": "홀덤 랩 — Holdem Lab",
+  "short_name": "홀덤 랩",
+  "description": "텍사스 홀덤 팟 오즈·아웃츠·레인지 트레이닝",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1412",
+  "theme_color": "#0f1412",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
