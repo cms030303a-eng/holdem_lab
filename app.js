@@ -1,11 +1,12 @@
-/* Holdem Lab — UI (v1.2: modular quizzes + challenge modes) */
+/* Holdem Lab — UI (v1.8: i18n — ko / en / de / fr / es / it) */
 (function () {
   'use strict';
   var E = window.Engine;
+  var I = window.I18N, t = I.t;
   var $ = function (id) { return document.getElementById(id); };
-  var APP_VER = '1.5';
+  var APP_VER = '1.9';
   var TYPES = ['pot', 'outs', 'pre', 'pos', 'mu'];
-  var TYPE_NAME = { pot: '팟 오즈', outs: '아웃츠', pre: '프리플랍', pos: '포지션', mu: '매치업', mix: '전체 섞기' };
+  function typeName(k) { return t('type.' + k); }
 
   /* =========================================================
      Storage
@@ -19,6 +20,7 @@
     TYPES.forEach(function (k) { s.stats[k] = Object.assign({ c: 0, w: 0, streak: 0, best: 0, hist: [] }, s.stats[k] || {}); });
     s.settings = Object.assign({ tol: 2, focus: true, tab: 'pot', chType: 'mix', posKind: 'mix', goal: 30 }, s.settings || {});
     s.days = s.days && typeof s.days === 'object' ? s.days : {};
+    s.ads = Object.assign({ runs: 0, lastRun: 0, lastAt: 0 }, s.ads || {});
     s.log = Array.isArray(s.log) ? s.log : [];
     s.notes = Array.isArray(s.notes) ? s.notes : [];
     s.records = s.records && typeof s.records === 'object' ? s.records : {};
@@ -73,13 +75,13 @@
     }
     el.innerHTML =
       '<div class="stats-grid">' +
-      '<div class="stat ok"><div class="k">정답</div><div class="v">' + s.c + '</div></div>' +
-      '<div class="stat ng"><div class="k">오답</div><div class="v">' + s.w + '</div></div>' +
-      '<div class="stat"><div class="k">정확도</div><div class="v">' + (acc === null ? '–' : acc + '<small>%</small>') + '</div></div>' +
-      '<div class="stat"><div class="k">연속·최고</div><div class="v">' + s.streak + '<small>/' + s.best + '</small></div></div>' +
+      '<div class="stat ok"><div class="k">' + t('st.correct') + '</div><div class="v">' + s.c + '</div></div>' +
+      '<div class="stat ng"><div class="k">' + t('st.wrong') + '</div><div class="v">' + s.w + '</div></div>' +
+      '<div class="stat"><div class="k">' + t('st.acc') + '</div><div class="v">' + (acc === null ? '–' : acc + '<small>%</small>') + '</div></div>' +
+      '<div class="stat"><div class="k">' + t('st.streak') + '</div><div class="v">' + s.streak + '<small>/' + s.best + '</small></div></div>' +
       '</div>' +
       '<div class="stats-foot"><div class="hist">' + hist + '</div><span class="reset-wrap"></span></div>';
-    confirmButton(el.querySelector('.reset-wrap'), '기록 초기화', function () {
+    confirmButton(el.querySelector('.reset-wrap'), t('st.reset'), function () {
       store.stats[tab] = { c: 0, w: 0, streak: 0, best: 0, hist: [] }; save(); renderStats(tab);
     });
     var nav = document.querySelector('[data-acc="' + tab + '"]');
@@ -89,13 +91,13 @@
     var best = 0;
     Object.keys(store.records).forEach(function (k) { if (k.indexOf('survival:') === 0) best = Math.max(best, store.records[k]); });
     var nav = document.querySelector('[data-acc="ch"]');
-    if (nav) nav.textContent = store.notes.length ? '오답 ' + store.notes.length : (best ? '최고 ' + best : '–');
+    if (nav) nav.textContent = store.notes.length ? t('nav.notes', store.notes.length) : (best ? t('nav.best', best) : '–');
   }
   function confirmButton(wrap, label, onYes) {
     function idle() {
       wrap.innerHTML = '<button type="button" class="reset">' + label + '</button>';
       wrap.firstChild.addEventListener('click', function () {
-        wrap.innerHTML = '<span class="reset-confirm"><button type="button" class="yes">확인</button><button type="button" class="no">취소</button></span>';
+        wrap.innerHTML = '<span class="reset-confirm"><button type="button" class="yes">' + t('c.confirm') + '</button><button type="button" class="no">' + t('c.cancel') + '</button></span>';
         wrap.querySelector('.yes').addEventListener('click', onYes);
         wrap.querySelector('.no').addEventListener('click', idle);
       });
@@ -118,10 +120,10 @@
   function fetchWithTimeout(url, ms) {
     return new Promise(function (resolve, reject) {
       var done = false, ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-      var t = setTimeout(function () { if (!done) { done = true; if (ctrl) ctrl.abort(); reject(new Error('timeout')); } }, ms);
+      var tm = setTimeout(function () { if (!done) { done = true; if (ctrl) ctrl.abort(); reject(new Error('timeout')); } }, ms);
       fetch(url, { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined }).then(function (r) {
-        if (done) return; done = true; clearTimeout(t); resolve(r);
-      }, function (e) { if (done) return; done = true; clearTimeout(t); reject(e); });
+        if (done) return; done = true; clearTimeout(tm); resolve(r);
+      }, function (e) { if (done) return; done = true; clearTimeout(tm); reject(e); });
     });
   }
   function localDeck() { setSource('local'); return { cards: E.shuffledDeck(), source: 'local', img: {} }; }
@@ -151,9 +153,9 @@
       var url = img && img[c];
       if (!url || badImg[url]) return null;
       return new Promise(function (res) {
-        var im = new Image(), t = setTimeout(function () { badImg[url] = 1; res(); }, 4000);
-        im.onload = function () { clearTimeout(t); res(); };
-        im.onerror = function () { clearTimeout(t); badImg[url] = 1; res(); };
+        var im = new Image(), tm = setTimeout(function () { badImg[url] = 1; res(); }, 4000);
+        im.onload = function () { clearTimeout(tm); res(); };
+        im.onerror = function () { clearTimeout(tm); badImg[url] = 1; res(); };
         im.src = url;
       });
     }));
@@ -197,7 +199,7 @@
   }
   function skeleton(root, msg) {
     var g = '<div class="card ghost"></div>';
-    root.innerHTML = '<div class="table-panel"><div class="street">' + (msg || '카드 받는 중…') + '</div>' +
+    root.innerHTML = '<div class="table-panel"><div class="street">' + (msg || t('c.dealing')) + '</div>' +
       '<div class="row-label">&nbsp;</div><div class="board">' + g + g + g + '<div class="slot"></div><div class="slot"></div></div>' +
       '<div class="row-label">&nbsp;</div><div class="hole">' + g + g + '</div></div>';
   }
@@ -213,20 +215,23 @@
     var s = ms / 1000, m = Math.floor(s / 60), r = s - m * 60;
     return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1);
   }
-  function fmtSec(ms) { return (ms / 1000).toFixed(1) + '초'; }
+  function fmtSec(ms) { return t('u.sec', (ms / 1000).toFixed(1)); }
+  function catName(i) { return t('cat.' + i); }
+  function drawName(id) { return t('dr.' + id); }
+  function b(x) { return '<b>' + x + '</b>'; }
 
   /* choice buttons: ctx.instant → answer immediately on tap */
   function choices(opts, cls, ctx) {
     var box = el('div', cls), val = null, locked = false;
     opts.forEach(function (o) {
-      var b = el('button', null, o[1]); b.type = 'button'; b.setAttribute('data-v', o[0]);
-      b.addEventListener('click', function () {
+      var bt = el('button', null, o[1]); bt.type = 'button'; bt.setAttribute('data-v', o[0]);
+      bt.addEventListener('click', function () {
         if (locked) return;
         val = o[0];
-        box.querySelectorAll('button').forEach(function (x) { x.classList.toggle('sel', x === b); });
+        box.querySelectorAll('button').forEach(function (x) { x.classList.toggle('sel', x === bt); });
         if (ctx.instant) ctx.onSubmit(); else ctx.onReady(true);
       });
-      box.appendChild(b);
+      box.appendChild(bt);
     });
     return {
       el: box,
@@ -244,8 +249,8 @@
     var w = el('div', 'stepper' + (big ? ' big' : ''), '<button type="button" data-d="-1">−</button><output>–</output><button type="button" data-d="1">+</button>');
     var out = w.querySelector('output'), v = null, locked = false;
     w.addEventListener('click', function (e) {
-      var b = e.target.closest('button'); if (!b || locked) return;
-      var d = +b.getAttribute('data-d');
+      var bt = e.target.closest('button'); if (!bt || locked) return;
+      var d = +bt.getAttribute('data-d');
       v = v === null ? (d > 0 ? 1 : 0) : Math.max(min, Math.min(max, v + d));
       out.textContent = v; if (onChange) onChange(v);
     });
@@ -254,9 +259,10 @@
   function step(i, title, body) {
     return '<div class="step"><div class="step-h"><span class="i">' + i + '</span><span class="t">' + title + '</span></div>' + body + '</div>';
   }
+  function note(html) { return '<div class="note">' + html + '</div>'; }
   function verdictHtml(res) {
-    return '<div class="verdict ' + (res.ok ? 'ok' : 'ng') + '"><span class="res">' + (res.ok ? '정답' : '오답') + '</span>' +
-      '<span class="ans">정답 <b>' + res.correctTxt + '</b>' + (res.mineTxt ? ' · 내 답 ' + res.mineTxt : '') + '</span></div>';
+    return '<div class="verdict ' + (res.ok ? 'ok' : 'ng') + '"><span class="res">' + (res.ok ? t('v.ok') : t('v.ng')) + '</span>' +
+      '<span class="ans">' + t('v.answer', b(res.correctTxt)) + (res.mineTxt ? ' · ' + t('v.mine', res.mineTxt) : '') + '</span></div>';
   }
 
   /* =========================================================
@@ -287,60 +293,65 @@
   }
   function streetLabel(street, allIn) {
     return street === 'flop'
-      ? 'FLOP · 남은 카드 <b>2장</b>' + (allIn ? ' · 상대 <b>올인</b>' : ' · 리버까지 본다고 가정')
-      : 'TURN · 남은 카드 <b>1장</b>';
+      ? 'FLOP · ' + t('sl.left2') + (allIn ? ' · ' + t('sl.allin') : ' · ' + t('sl.toriver'))
+      : 'TURN · ' + t('sl.left1');
   }
-  function drawPanel(q, allIn, note) {
+  function drawPanel(q, allIn, noteHtml) {
     return panel(streetLabel(q.street, allIn), [
       el('div', 'row-label', 'BOARD'),
       cardRow('board', q.board, q.img, q.street === 'flop' ? ['TURN', 'RIVER'] : ['RIVER']),
       el('div', 'row-label', 'HERO'),
       cardRow('hole', q.hole, q.img)
-    ], note);
+    ], noteHtml);
   }
-  function drawKind(a) { return a.draws.length > 1 ? '복합 드로우' : (a.draws[0] || '기타'); }
-  function outsBucket(n) { return n <= 5 ? '아웃 2~5장' : n <= 9 ? '아웃 6~9장' : n <= 14 ? '아웃 10~14장' : '아웃 15장+'; }
-  var OUT_RULE = '아웃츠(실전식): 내 홀카드로 <b>플러시·스트레이트·풀하우스, 셋·트리플·투페어, 오버카드→탑페어</b>를 만드는 카드 · 승률 = 아웃츠 <b>×4</b>(2장 남음) / <b>×2</b>(1장 남음)';
+  function drawKey(a) { return a.draws.length > 1 ? 'dk.combo' : (a.draws[0] ? 'dr.' + a.draws[0] : 'dk.other'); }
+  function outsBucket(n) { return n <= 5 ? 'ob.2_5' : n <= 9 ? 'ob.6_9' : n <= 14 ? 'ob.10_14' : 'ob.15'; }
+  function drawsTxt(a) { return a.draws.map(drawName).join(' · '); }
   function outsBreakdown(a) {
     var dupSet = {}; a.both.forEach(function (c) { dupSet[c] = 1; });
-    var html = '<div class="formula">아웃츠 = <span class="hl">' + a.count + '장</span></div>';
-    html += '<div style="margin-top:6px">' + a.draws.map(function (d) { return '<span class="tag">' + d + '</span>'; }).join('') + '</div>';
+    var html = '<div class="formula">' + t('ob.outs_eq', '<span class="hl">' + t('u.cards', a.count) + '</span>') + '</div>';
+    html += '<div style="margin-top:6px">' + a.draws.map(function (d) { return '<span class="tag">' + drawName(d) + '</span>'; }).join('') + '</div>';
     html += '<div class="outs-group">';
     var parts = [];
     E.OUT_GROUPS.forEach(function (g) {
-      var cs = a.groups[g]; if (!cs.length) return;
+      var cs = a.groups[g]; if (!cs || !cs.length) return;
       parts.push(cs.length);
-      html += '<div class="g">' + g + ' ' + cs.length + '</div><div class="mini-cards">' + sortCards(cs).map(function (c) { return mc(c, g === '플러시' && dupSet[c]); }).join('') + '</div>';
+      html += '<div class="g">' + t('og.' + g) + ' ' + cs.length + '</div><div class="mini-cards">' + sortCards(cs).map(function (c) { return mc(c, g === 'flush' && dupSet[c]); }).join('') + '</div>';
     });
     html += '</div>';
-    if (parts.length > 1) html += '<div class="note">합계: ' + parts.join(' + ') + ' = <b>' + a.count + '장</b> (한 카드는 가장 좋은 족보 한 곳에만 셈)</div>';
-    if (a.both.length) html += '<div class="note">노란 테두리 <b>' + a.both.length + '장</b>은 스트레이트도 완성하지만 플러시로 한 번만 셉니다.</div>';
-    if (a.groups['오버카드→탑페어'].length) html += '<div class="note">오버카드 아웃은 상대가 투페어 이상이면 무의미해서, 실전에선 절반 정도로 할인해 세기도 합니다 (여기선 그대로 셈).</div>';
+    if (parts.length > 1) html += note(t('ob.sum', parts.join(' + '), b(t('u.cards', a.count))));
+    if (a.both.length) html += note(t('ob.dup', b(t('u.cards', a.both.length))));
+    if (a.groups.over && a.groups.over.length) html += note(t('ob.over_note'));
     return html;
   }
   function equityStepHtml(a, allInFlop) {
     var mult = a.cardsToCome === 2 ? 4 : 2;
     var html = '<div class="formula">' + a.count + ' × ' + mult + ' = <span class="hl">' + a.rulePct + '%</span></div>';
     if (a.cardsToCome === 2) {
-      html += '<div class="note">남은 카드 2장' + (allInFlop ? '(상대 올인 → 리버까지 모두 봄)' : '') + ' → <b>×4</b>. ' +
-        '정확한 확률: 1 − (' + (a.unseen - a.count) + '/' + a.unseen + ' × ' + (a.unseen - a.count - 1) + '/' + (a.unseen - 1) + ') = <b>' + f1(a.exactPct) + '%</b></div>';
+      html += note(t('eq.two_left') + (allInFlop ? ' ' + t('eq.allin_paren') : '') + ' → <b>×4</b>. ' +
+        t('eq.exact', '1 − (' + (a.unseen - a.count) + '/' + a.unseen + ' × ' + (a.unseen - a.count - 1) + '/' + (a.unseen - 1) + ')', b(f1(a.exactPct) + '%')));
     } else {
-      html += '<div class="note">남은 카드 1장 → <b>×2</b>. 정확한 확률: ' + a.count + ' ÷ ' + a.unseen + ' = <b>' + f1(a.exactPct) + '%</b></div>';
+      html += note(t('eq.one_left') + ' → <b>×2</b>. ' + t('eq.exact', a.count + ' ÷ ' + a.unseen, b(f1(a.exactPct) + '%')));
     }
     var diff = a.rulePct - a.exactPct;
     if (Math.abs(diff) >= 2) {
-      html += '<div class="note">규칙값이 정확한 값보다 <b>' + f1(Math.abs(diff)) + '%p ' + (diff > 0 ? '높음' : '낮음') + '</b>' +
-        (diff > 0 && a.cardsToCome === 2 ? ' — 아웃츠가 많을수록 ×4 규칙은 과대평가됩니다. 8아웃 이상이면 “×4 − (아웃츠 − 8)” 보정이 더 가깝습니다.' : '') + '</div>';
+      html += note(t(diff > 0 ? 'eq.rule_high' : 'eq.rule_low', b(f1(Math.abs(diff)) + '%p')) +
+        (diff > 0 && a.cardsToCome === 2 ? ' — ' + t('eq.over4') : ''));
     }
     return html;
+  }
+  function refreshOuts(type, q) {           // stored notes from older versions / other languages → recompute outs
+    if ((type === 'pot' || type === 'outs' || (type === 'pos' && q.kind === 'post')) && q.hole && q.board) q.outs = E.analyzeOuts(q.hole, q.board);
+    return q;
   }
 
   /* =========================================================
      Quiz modules
      each: deal() → Promise<q>, render(root,q,ctx) → ctrl{answer(),lock(res,a)},
-           judge(q,a) → res, explain(q,a,res) → html, line(q,a,res), summary(q), keys(q,a,res), submit(bool)
+           judge(q,a) → res, explain(q,a,res) → html, line, summary, keys, hint, submit(bool)
      ========================================================= */
   var M = {};
+  function act(k) { return t('act.' + k); }
 
   /* ---------- 01 POT ODDS ---------- */
   function potMoney(a, street) {
@@ -356,25 +367,30 @@
     var m = pick(pref.length ? pref : cands.length ? cands : [{ bet: Math.round(potSize / 2), need: 25 }]);
     return { pot: potSize, bet: m.bet, need: m.bet / (potSize + 2 * m.bet) * 100 };
   }
-  var LAB = { call: '콜', fold: '폴드', open: '오픈' };
+  function moneyCells(cells) {
+    return el('div', 'money', cells.map(function (c) {
+      return '<div><div class="k">' + c[0] + '</div><div class="v">' + c[1] + '</div><div class="s">' + (c[2] || '&nbsp;') + '</div></div>';
+    }).join(''));
+  }
   M.pot = {
     submit: false,
     deal: function () { return dealDrawSpot('pot').then(function (q) { q.money = potMoney(q.outs, q.street); return q; }); },
     cards: function (q) { return q.hole.concat(q.board); },
     render: function (root, q, ctx) {
       var m = q.money;
-      root.appendChild(drawPanel(q, true, ctx.practice ? OUT_RULE + '<br>가정: 상대는 <b>탑페어</b> — 아웃이 떨어지면 내가 이긴다고 봄' : '가정: 상대 탑페어 · 실전식 아웃츠'));
-      root.appendChild(el('div', 'money',
-        '<div><div class="k">팟 (베팅 전)</div><div class="v">' + m.pot + '</div><div class="s">&nbsp;</div></div>' +
-        '<div><div class="k">상대 베팅</div><div class="v">' + m.bet + '</div><div class="s">팟의 ' + Math.round(m.bet / m.pot * 100) + '%' + (q.street === 'flop' ? ' · 올인' : '') + '</div></div>' +
-        '<div><div class="k">내 콜</div><div class="v">' + m.bet + '</div><div class="s">' + (q.street === 'flop' ? '콜하면 리버까지' : '리버 1장') + '</div></div>'));
+      root.appendChild(drawPanel(q, true, ctx.practice ? t('rule.outs') + '<br>' + t('pot.assume_long') : t('rule.short')));
+      root.appendChild(moneyCells([
+        [t('m.pot'), m.pot],
+        [t('m.bet'), m.bet, t('m.of_pot', Math.round(m.bet / m.pot * 100)) + (q.street === 'flop' ? ' · ' + t('m.allin') : '')],
+        [t('m.call'), m.bet, q.street === 'flop' ? t('m.to_river') : t('m.river1')]
+      ]));
       var st = null;
       if (ctx.practice) {
         st = stepper(0, 25, false);
-        var f = el('div', 'field optional', '<div class="field-label">내가 센 아웃츠 <span class="muted">(선택 · 채점 안 함)</span></div>');
+        var f = el('div', 'field optional', '<div class="field-label">' + t('pot.my_outs') + ' <span class="muted">' + t('pot.optional') + '</span></div>');
         f.appendChild(st.el); root.appendChild(f);
       }
-      var ch = choices([['fold', '폴드'], ['call', '콜']], 'choices two', ctx);
+      var ch = choices([['fold', act('fold')], ['call', act('call')]], 'choices two', ctx);
       root.appendChild(ch.el);
       return {
         answer: function () { return ch.val() ? { choice: ch.val(), myOuts: st ? st.val() : null } : null; },
@@ -383,32 +399,33 @@
     },
     judge: function (q, a) {
       var correct = q.outs.rulePct > q.money.need ? 'call' : 'fold';
-      return { ok: a.choice === correct, correct: correct, correctTxt: LAB[correct], mineTxt: LAB[a.choice] };
+      return { ok: a.choice === correct, correct: correct, correctTxt: act(correct), mineTxt: act(a.choice) };
     },
     explain: function (q, a, res) {
       var o = q.outs, m = q.money, total = m.pot + 2 * m.bet, eqF = o.rulePct / 100;
       var ev = eqF * (m.pot + m.bet) - (1 - eqF) * m.bet, correct = res.correct;
       var s1 = outsBreakdown(o);
-      if (a.myOuts !== null && a.myOuts !== undefined) s1 += '<div class="note">내가 센 아웃츠 <b>' + a.myOuts + '</b> → ' + (a.myOuts === o.count ? '정확' : (a.myOuts > o.count ? '+' : '') + (a.myOuts - o.count) + '장 차이') + '</div>';
-      var html = step('01', '아웃츠 세기', s1);
-      html += step('02', '승률 근사 (아웃츠 규칙)', equityStepHtml(o, q.street === 'flop'));
-      html += step('03', '팟 오즈 = 콜 금액 ÷ 콜한 뒤 전체 팟',
+      if (a.myOuts !== null && a.myOuts !== undefined) s1 += note(t('pot.my_outs_res', b(a.myOuts), a.myOuts === o.count ? t('pot.exact') : t('pot.diff', (a.myOuts > o.count ? '+' : '') + (a.myOuts - o.count))));
+      var html = step('01', t('pot.s1'), s1);
+      html += step('02', t('pot.s2'), equityStepHtml(o, q.street === 'flop'));
+      html += step('03', t('pot.s3'),
         '<div class="formula">' + m.bet + ' ÷ (' + m.pot + ' + ' + m.bet + ' + ' + m.bet + ')<br>= ' + m.bet + ' ÷ ' + total + ' = <span class="wa">' + f1(m.need) + '%</span></div>' +
-        '<div class="note">이 콜이 손익분기가 되려면 최소 <b>' + f1(m.need) + '%</b>는 이겨야 합니다.</div>');
+        note(t('pot.need_note', b(f1(m.need) + '%'))));
       var e = Math.min(100, o.rulePct), n = m.need;
-      html += step('04', '비교 → 결정',
+      html += step('04', t('pot.s4'),
         '<div class="meter"><div class="fill" style="width:' + e + '%"></div><div class="need" style="left:' + n + '%"></div>' +
-        '<div class="lab e" style="left:' + Math.max(6, Math.min(94, e)) + '%">승률 ' + o.rulePct + '%</div>' +
-        '<div class="lab n" style="left:' + Math.max(6, Math.min(94, n)) + '%;top:auto;bottom:100%;margin:0 0 3px">필요 ' + f1(n) + '%</div></div>' +
-        '<div class="formula">' + o.rulePct + '% ' + (correct === 'call' ? '&gt;' : '&lt;') + ' ' + f1(n) + '% → <span class="' + (correct === 'call' ? 'hl' : 'bd') + '">' + LAB[correct] + '</span></div>' +
-        '<div class="note">콜 EV ≈ ' + o.rulePct + '% × ' + (m.pot + m.bet) + ' − ' + (100 - o.rulePct) + '% × ' + m.bet + ' = <b>' + (ev >= 0 ? '+' : '') + f1(ev) + '</b> (근사 승률 기준, 칩 단위)</div>' +
-        (Math.sign(o.exactPct - n) !== Math.sign(o.rulePct - n) ? '<div class="note">※ 정확한 확률(' + f1(o.exactPct) + '%)로 보면 결론이 달라지는 경계 상황입니다. 채점은 규칙값 기준.</div>' : ''));
+        '<div class="lab e" style="left:' + Math.max(6, Math.min(94, e)) + '%">' + t('pot.lab_eq', o.rulePct) + '</div>' +
+        '<div class="lab n" style="left:' + Math.max(6, Math.min(94, n)) + '%;top:auto;bottom:100%;margin:0 0 3px">' + t('pot.lab_need', f1(n)) + '</div></div>' +
+        '<div class="formula">' + o.rulePct + '% ' + (correct === 'call' ? '&gt;' : '&lt;') + ' ' + f1(n) + '% → <span class="' + (correct === 'call' ? 'hl' : 'bd') + '">' + act(correct) + '</span></div>' +
+        note(t('pot.ev', o.rulePct + '% × ' + (m.pot + m.bet) + ' − ' + (100 - o.rulePct) + '% × ' + m.bet, b((ev >= 0 ? '+' : '') + f1(ev)))) +
+        (Math.sign(o.exactPct - n) !== Math.sign(o.rulePct - n) ? note(t('pot.border', f1(o.exactPct))) : ''));
       return html;
     },
-    line: function (q, a, res) { return '정답 ' + res.correctTxt + ' · 승률 ' + q.outs.rulePct + '% vs 필요 ' + f1(q.money.need) + '%'; },
-    summary: function (q) { return (q.street === 'flop' ? '플랍' : '턴') + ' · ' + cardsTxt(q.hole) + ' · ' + q.outs.count + '아웃 · 베팅 ' + Math.round(q.money.bet / q.money.pot * 100) + '%'; },
+    line: function (q, a, res) { return t('pot.line', res.correctTxt, q.outs.rulePct, f1(q.money.need)); },
+    summary: function (q) { return t(q.street === 'flop' ? 'w.flop' : 'w.turn') + ' · ' + cardsTxt(q.hole) + ' · ' + t('u.outs', q.outs.count) + ' · ' + t('pot.sum_bet', Math.round(q.money.bet / q.money.pot * 100)); },
+    hint: function (q) { return t('pot.hint', b(drawsTxt(q.outs))); },
     keys: function (q, a, res) {
-      return [['스트리트', q.street === 'flop' ? '플랍 (×4)' : '턴 (×2)'], ['드로우', drawKind(q.outs)], ['아웃 수', outsBucket(q.outs.count)], ['정답 방향', res.correct === 'call' ? '콜이 정답' : '폴드가 정답']];
+      return [['g.street', q.street === 'flop' ? 'k.flop4' : 'k.turn2'], ['g.draw', drawKey(q.outs)], ['g.nouts', outsBucket(q.outs.count)], ['g.dir', res.correct === 'call' ? 'k.call_ok' : 'k.fold_ok']];
     }
   };
 
@@ -418,32 +435,32 @@
     deal: function () { return dealDrawSpot('outs'); },
     cards: function (q) { return q.hole.concat(q.board); },
     render: function (root, q, ctx) {
-      root.appendChild(drawPanel(q, false, ctx.practice ? OUT_RULE + ' · 입력한 승률은 규칙값과 정확한 확률 중 가까운 쪽과 비교' : null));
+      root.appendChild(drawPanel(q, false, ctx.practice ? t('rule.outs') + '<br>' + t('outs.assume_long') : t('rule.short')));
       var inputs = el('div', 'inputs');
-      var f1el = el('div', 'field', '<div class="field-label">아웃츠 (장)</div>');
+      var f1el = el('div', 'field', '<div class="field-label">' + t('outs.in_outs') + '</div>');
       var check = function () { ctx.onReady(st.val() !== null && inp.value !== '' && !isNaN(+inp.value)); };
       var st = stepper(0, 25, true, check);
       f1el.appendChild(st.el);
-      var f2el = el('div', 'field', '<div class="field-label">승률 (%)</div><div class="pct-input"><input type="number" inputmode="decimal" min="0" max="100" step="1" placeholder="0"><span>%</span></div>');
+      var f2el = el('div', 'field', '<div class="field-label">' + t('outs.in_eq') + '</div><div class="pct-input"><input type="number" inputmode="decimal" min="0" max="100" step="1" placeholder="0"><span>%</span></div>');
       var inp = f2el.querySelector('input');
       inp.addEventListener('input', check);
       inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { inp.blur(); ctx.onSubmit(); } });
       inputs.appendChild(f1el); inputs.appendChild(f2el);
       root.appendChild(inputs);
       if (ctx.practice) {
-        var tol = el('div', 'tol', '<span class="field-label">승률 오차 허용 (%p)</span><div class="chips"></div>');
+        var tol = el('div', 'tol', '<span class="field-label">' + t('outs.tol') + '</span><div class="chips"></div>');
         var chips = tol.querySelector('.chips');
-        [1, 2, 3, 5].forEach(function (t) {
-          var b = el('button', t === store.settings.tol ? 'on' : '', '±' + t); b.type = 'button';
-          b.addEventListener('click', function () {
-            store.settings.tol = t; save();
-            chips.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+        [1, 2, 3, 5].forEach(function (v) {
+          var bt = el('button', v === store.settings.tol ? 'on' : '', '±' + v); bt.type = 'button';
+          bt.addEventListener('click', function () {
+            store.settings.tol = v; save();
+            chips.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === bt); });
           });
-          chips.appendChild(b);
+          chips.appendChild(bt);
         });
         root.appendChild(tol);
       } else {
-        root.appendChild(el('div', 'scale-legend', '승률 허용 오차 ±' + store.settings.tol + '%p · 아웃츠는 정확히'));
+        root.appendChild(el('div', 'scale-legend', t('outs.tol_short', store.settings.tol)));
       }
       return {
         answer: function () { return st.val() !== null && inp.value !== '' ? { n: st.val(), p: +inp.value } : null; },
@@ -455,21 +472,22 @@
       var dRule = Math.abs(a.p - o.rulePct), dExact = Math.abs(a.p - o.exactPct);
       var outsOK = a.n === o.count, pctOK = Math.min(dRule, dExact) <= tol + 1e-9;
       return { ok: outsOK && pctOK, outsOK: outsOK, pctOK: pctOK, dRule: dRule, dExact: dExact, tol: tol,
-        correctTxt: o.count + '장 · ' + o.rulePct + '%', mineTxt: a.n + '장 · ' + fmtPct(a.p) + '%' };
+        correctTxt: t('u.outs', o.count) + ' · ' + o.rulePct + '%', mineTxt: t('u.outs', a.n) + ' · ' + fmtPct(a.p) + '%' };
     },
     explain: function (q, a, res) {
       var o = q.outs;
-      var html = step('01', '아웃츠 ' + (res.outsOK ? '✓' : '✗') + ' (입력 ' + a.n + ' / 정답 ' + o.count + ')', outsBreakdown(o));
-      var cmp = '<div class="note">입력 <b>' + fmtPct(a.p) + '%</b> → 규칙값과 ' + f1(res.dRule) + '%p, 정확값과 ' + f1(res.dExact) + '%p 차이 · 허용 ±' + res.tol + '%p → <b>' + (res.pctOK ? '통과' : '벗어남') + '</b></div>';
-      if (!res.outsOK && res.pctOK) cmp += '<div class="note">승률은 범위 안이지만 아웃츠 수가 달라 오답 처리됩니다.</div>';
-      html += step('02', '승률 ' + (res.pctOK ? '✓' : '✗'), equityStepHtml(o, false) + cmp);
+      var html = step('01', t('outs.s1', res.outsOK ? '✓' : '✗', a.n, o.count), outsBreakdown(o));
+      var cmp = note(t('outs.cmp', b(fmtPct(a.p) + '%'), f1(res.dRule), f1(res.dExact), res.tol, b(res.pctOK ? t('outs.pass') : t('outs.fail'))));
+      if (!res.outsOK && res.pctOK) cmp += note(t('outs.pct_ok_outs_ng'));
+      html += step('02', t('outs.s2', res.pctOK ? '✓' : '✗'), equityStepHtml(o, false) + cmp);
       return html;
     },
     line: function (q, a, res) {
-      return '정답 ' + q.outs.count + '장 · ' + q.outs.rulePct + '% (정확 ' + f1(q.outs.exactPct) + '%)' + (res.ok ? '' : res.outsOK ? ' · 승률 범위 밖' : ' · 아웃츠 틀림');
+      return t('outs.line', t('u.outs', q.outs.count), q.outs.rulePct, f1(q.outs.exactPct)) + (res.ok ? '' : res.outsOK ? ' · ' + t('outs.line_pct') : ' · ' + t('outs.line_outs'));
     },
-    summary: function (q) { return (q.street === 'flop' ? '플랍' : '턴') + ' · ' + cardsTxt(q.hole) + ' | ' + cardsTxt(q.board) + ' · ' + q.outs.count + '아웃'; },
-    keys: function (q) { return [['드로우', drawKind(q.outs)], ['아웃 수', outsBucket(q.outs.count)], ['스트리트', q.street === 'flop' ? '플랍 (×4)' : '턴 (×2)']]; }
+    summary: function (q) { return t(q.street === 'flop' ? 'w.flop' : 'w.turn') + ' · ' + cardsTxt(q.hole) + ' | ' + cardsTxt(q.board) + ' · ' + t('u.outs', q.outs.count); },
+    hint: function (q) { return t('outs.hint', b(drawsTxt(q.outs)), q.outs.cardsToCome, q.outs.cardsToCome === 2 ? 4 : 2); },
+    keys: function (q) { return [['g.draw', drawKey(q.outs)], ['g.nouts', outsBucket(q.outs.count)], ['g.street', q.street === 'flop' ? 'k.flop4' : 'k.turn2']]; }
   };
 
   /* ---------- 03 PREFLOP ---------- */
@@ -480,23 +498,24 @@
     var d = Math.abs(POS.indexOf(pos) - POS.indexOf(first));
     return d <= 1 ? 1 : d === 2 ? 0.6 : 0.3;
   }
-  function keyDesc(k) { return k.length === 2 ? '포켓 페어' : k[2] === 's' ? '수딧 (같은 무늬)' : '오프수트'; }
+  function keyKind(k) { return k.length === 2 ? 'pair' : k[2] === 's' ? 'suited' : 'offsuit'; }
+  function keyDesc(k) { return t('hk.' + keyKind(k) + '_long'); }
+  function famName(key) { return key.length === 2 ? t('hk.pair') : key[0] + 'x ' + t('hk.' + (key[2] === 's' ? 'suited' : 'offsuit')); }
   function familyRule(pos, key) {
     var toks = E.RANGE_TEXT[pos].split(',');
     var pair = key.length === 2;
-    var sel = toks.filter(function (t) {
-      if (pair) return t[0] === t[1];
-      return t[0] === key[0] && t[1] !== t[0] && t[2] === key[2];
+    var sel = toks.filter(function (tk) {
+      if (pair) return tk[0] === tk[1];
+      return tk[0] === key[0] && tk[1] !== tk[0] && tk[2] === key[2];
     });
-    var fam = pair ? '포켓 페어' : key[0] + 'x ' + (key[2] === 's' ? '수딧' : '오프수트');
-    return { fam: fam, txt: sel.length ? sel.join(', ') : '없음 (모두 폴드)' };
+    return { fam: famName(key), txt: sel.length ? sel.join(', ') : t('pre.none_fold') };
   }
   function rangeGrid(pos, meKey) {
     var R = E.RANGES[pos], html = '<div class="grid13">';
     for (var a = 12; a >= 0; a--) {
-      for (var b = 12; b >= 0; b--) {
-        var key = a === b ? E.handKey(a, a) : a > b ? E.handKey(a, b, true) : E.handKey(b, a, false);
-        html += '<div class="' + (R[key] ? 'in' : '') + (a === b ? ' pr' : '') + (key === meKey ? ' me' : '') + '">' + key + '</div>';
+      for (var bb = 12; bb >= 0; bb--) {
+        var key = a === bb ? E.handKey(a, a) : a > bb ? E.handKey(a, bb, true) : E.handKey(bb, a, false);
+        html += '<div class="' + (R[key] ? 'in' : '') + (a === bb ? ' pr' : '') + (key === meKey ? ' me' : '') + '">' + key + '</div>';
       }
     }
     return html + '</div>';
@@ -520,57 +539,53 @@
     render: function (root, q, ctx) {
       var idx = POS.indexOf(q.pos);
       var seats = el('div', 'seats', POS.map(function (p, i) {
-        return '<div class="seat ' + (i < idx ? 'folded' : i === idx ? 'me' : '') + '">' + p + '<small>' + (i < idx ? 'FOLD' : i === idx ? 'YOU' : '대기') + '</small></div>';
+        return '<div class="seat ' + (i < idx ? 'folded' : i === idx ? 'me' : '') + '">' + p + '<small>' + (i < idx ? 'FOLD' : i === idx ? 'YOU' : t('seat.wait')) + '</small></div>';
       }).join(''));
-      root.appendChild(panel('PREFLOP · 앞에서 모두 폴드 · 100BB', [
+      root.appendChild(panel('PREFLOP · ' + t('pre.street'), [
         seats, el('div', 'row-label', 'HERO'), cardRow('hole', q.hole, q.img),
         el('div', 'hand-key', q.key + ' <span class="muted">· ' + keyDesc(q.key) + '</span>')
       ]));
       if (ctx.practice) {
-        var tg = el('label', 'toggle', '<input type="checkbox"><span>경계 핸드 위주로 출제 <em>(어디서도 안 여는 핸드 출제 빈도 ↓)</em></span>');
+        var tg = el('label', 'toggle', '<input type="checkbox"><span>' + t('pre.focus') + ' <em>' + t('pre.focus_sub') + '</em></span>');
         var cb = tg.querySelector('input'); cb.checked = !!store.settings.focus;
         cb.addEventListener('change', function () { store.settings.focus = cb.checked; save(); });
         root.appendChild(tg);
       }
-      var ch = choices([['fold', '폴드'], ['open', '오픈']], 'choices two', ctx);
+      var ch = choices([['fold', act('fold')], ['open', act('open')]], 'choices two', ctx);
       root.appendChild(ch.el);
       return { answer: function () { return ch.val() ? { choice: ch.val() } : null; }, lock: function (res, a) { ch.lock([res.correct], a.choice); } };
     },
     judge: function (q, a) {
       var correct = E.RANGES[q.pos][q.key] ? 'open' : 'fold';
-      return { ok: a.choice === correct, correct: correct, correctTxt: LAB[correct], mineTxt: LAB[a.choice] };
+      return { ok: a.choice === correct, correct: correct, correctTxt: act(correct), mineTxt: act(a.choice) };
     },
     explain: function (q, a, res) {
       var inRange = res.correct === 'open', first = E.firstOpenPos(q.key), fr = familyRule(q.pos, q.key);
-      var html = step('01', '판정',
-        '<div class="formula">' + q.key + ' @ ' + q.pos + ' → <span class="' + (inRange ? 'hl' : 'bd') + '">' + (inRange ? '레인지 안 · 오픈' : '레인지 밖 · 폴드') + '</span></div>' +
-        '<div class="note">' + q.pos + '에서 <b>' + fr.fam + '</b> 오픈 기준: <b>' + fr.txt + '</b></div>' +
-        '<div class="note">' + (first ? '이 핸드를 처음 오픈하는 자리: <b>' + first + '</b>' + (first !== 'BTN' ? ' (그 뒤 자리에서도 모두 오픈)' : '') : '<b>어느 포지션에서도 오픈하지 않는</b> 핸드입니다.') + '</div>');
-      html += step('02', '포지션별 같은 핸드', '<div class="pos-strip">' + POS.map(function (p) {
+      var html = step('01', t('c.verdict'),
+        '<div class="formula">' + q.key + ' @ ' + q.pos + ' → <span class="' + (inRange ? 'hl' : 'bd') + '">' + (inRange ? t('pre.in') : t('pre.out')) + '</span></div>' +
+        note(t('pre.fam_rule', q.pos, b(fr.fam), b(fr.txt))) +
+        note(first ? t('pre.first', b(first)) + (first !== 'BTN' ? ' ' + t('pre.first_after') : '') : t('pre.never')));
+      html += step('02', t('pre.s2'), '<div class="pos-strip">' + POS.map(function (p) {
         var y = !!E.RANGES[p][q.key];
-        return '<div class="' + (y ? 'y' : 'n') + (p === q.pos ? ' cur' : '') + '">' + p + '<b>' + (y ? '오픈' : '폴드') + '</b><small>' + f1(E.rangePct(p)) + '%</small></div>';
-      }).join('') + '</div><div class="note">아래 숫자 = 해당 자리 오픈 비율(전체 1326콤보 중). 뒤로 갈수록 남은 상대가 적어 레인지가 넓어집니다.</div>');
+        return '<div class="' + (y ? 'y' : 'n') + (p === q.pos ? ' cur' : '') + '">' + p + '<b>' + (y ? act('open') : act('fold')) + '</b><small>' + f1(E.rangePct(p)) + '%</small></div>';
+      }).join('') + '</div>' + note(t('pre.strip_note')));
       var combos = 0; Object.keys(E.RANGES[q.pos]).forEach(function (k) { combos += E.combosOf(k); });
-      html += step('03', q.pos + ' 오픈 레인지 · ' + f1(E.rangePct(q.pos)) + '% (' + combos + '콤보)',
-        rangeGrid(q.pos, q.key) +
-        '<div class="note">우상단 = 수딧, 좌하단 = 오프수트, 대각선 = 페어. 노란 테두리가 이번 핸드.</div>' +
-        '<div class="note">기준표: 100BB 캐시게임 RFI(앞에서 모두 폴드) 레인지를 단순화한 앱 기준입니다. 솔버·스테이크·레이크에 따라 경계 핸드는 조금씩 달라질 수 있어요.</div>');
+      html += step('03', t('pre.s3', q.pos, f1(E.rangePct(q.pos)), combos),
+        rangeGrid(q.pos, q.key) + note(t('grid.legend')) + note(t('pre.chart_note')));
       return html;
     },
-    line: function (q, a, res) {
-      var fr = familyRule(q.pos, q.key);
-      return q.key + ' @ ' + q.pos + ' → ' + res.correctTxt + ' · 기준 ' + fr.txt;
-    },
+    line: function (q, a, res) { return t('pre.line', q.key, q.pos, res.correctTxt, familyRule(q.pos, q.key).txt); },
     summary: function (q) { return q.pos + ' · ' + q.key + ' (' + cardsTxt(q.hole) + ')'; },
+    hint: function (q) { return t('pre.hint', q.pos, b(f1(E.rangePct(q.pos)) + '%'), familyRule(q.pos, q.key).fam); },
     keys: function (q, a, res) {
-      return [['포지션', q.pos], ['정답 방향', res.correct === 'open' ? '오픈이 정답' : '폴드가 정답'], ['핸드 종류', keyDesc(q.key).split(' ')[0]]];
+      return [['g.pos', q.pos], ['g.dir', res.correct === 'open' ? 'k.open_ok' : 'k.fold_ok'], ['g.handkind', 'hk.' + keyKind(q.key)]];
     }
   };
 
-  /* ---------- 04 MATCHUP ---------- */
+  /* ---------- 05 MATCHUP ---------- */
   var ITER = 100000;
   var T_FLIP = 0.58, T_DOM = 0.70, T_EDGE = 0.015;
-  var CHOICE_TXT = { A2: 'A 압도적', A1: 'A 약간 우세', '0': '코인플립', B1: 'B 약간 우세', B2: 'B 압도적' };
+  function choiceTxt(v) { return v === '0' ? t('mu.flip') : v[0] + ' ' + t(v[1] === '2' ? 'mu.dom' : 'mu.edge'); }
   function muAnswer(eqA) {
     var side = eqA >= 0.5 ? 'A' : 'B', fav = Math.max(eqA, 1 - eqA);
     var main = fav < T_FLIP ? '0' : fav < T_DOM ? side + '1' : side + '2';
@@ -584,47 +599,47 @@
     var A = rs(h1), B = rs(h2);
     var pA = A[0] === A[1], pB = B[0] === B[1];
     var sA = E.suitOf(h1[0]) === E.suitOf(h1[1]), sB = E.suitOf(h2[0]) === E.suitOf(h2[1]);
-    var t, kind, notes = [];
+    var type, kind, notes = [];
     if (pA && pB) {
-      kind = '페어 vs 페어';
-      t = A[0] > B[0] ? '오버페어 vs 언더페어 (A가 높은 페어)' : A[0] < B[0] ? '오버페어 vs 언더페어 (B가 높은 페어)' : '같은 페어 — 무승부가 대부분';
-      if (A[0] !== B[0]) notes.push('낮은 페어는 사실상 셋(트리플)을 맞추거나 스트레이트·플러시가 나와야 역전합니다.');
+      kind = 'pp';
+      type = A[0] > B[0] ? t('cl.pp_hi', 'A') : A[0] < B[0] ? t('cl.pp_hi', 'B') : t('cl.pp_same');
+      if (A[0] !== B[0]) notes.push(t('cl.pp_note'));
     } else if (pA || pB) {
       var P = pA ? A : B, X = pA ? B : A, who = pA ? 'A' : 'B', oth = pA ? 'B' : 'A';
       var overs = X.filter(function (r) { return r > P[0]; }).length, same = X.filter(function (r) { return r === P[0]; }).length;
-      if (same) { kind = '페어 vs 같은 랭크'; t = '페어 vs 같은 랭크를 가진 핸드 (' + who + ' 페어가 ' + oth + '의 아웃을 막음)'; notes.push(oth + '는 페어와 같은 랭크 카드가 1장만 남아 그쪽으로는 거의 이기지 못합니다.'); }
-      else if (overs === 2) { kind = '페어 vs 오버카드 2장'; t = '페어 vs 두 오버카드 — 대표적인 코인플립 구도'; notes.push(oth + '는 두 카드 중 하나만 페어가 되어도 역전합니다 (아웃 6장 × 보드 5장).'); }
-      else if (overs === 1) { kind = '페어 vs 오버1·언더1'; t = '페어 vs 오버카드 1장 + 언더카드 1장'; notes.push(oth + '는 주로 오버카드 3장에 의존합니다.'); }
-      else { kind = '페어 vs 언더카드 2장'; t = '페어 vs 언더카드 두 장'; notes.push(oth + '는 한 장이 페어가 되어도 ' + who + '의 페어보다 낮아 크게 불리합니다.'); }
+      if (same) { kind = 'p_same'; type = t('cl.p_same', who, oth); notes.push(t('cl.p_same_note', oth)); }
+      else if (overs === 2) { kind = 'p_2over'; type = t('cl.p_2over'); notes.push(t('cl.p_2over_note', oth)); }
+      else if (overs === 1) { kind = 'p_1over'; type = t('cl.p_1over'); notes.push(t('cl.p_1over_note', oth)); }
+      else { kind = 'p_2under'; type = t('cl.p_2under'); notes.push(t('cl.p_2under_note', oth, who)); }
     } else {
       var shared = A.filter(function (r) { return B.indexOf(r) >= 0; }).length;
-      if (shared) {
-        kind = '도미네이션'; t = '도미네이션 — 같은 랭크를 공유';
-        notes.push('공유 카드가 맞으면 둘 다 페어 → 킥커 싸움. 킥커가 낮은 쪽은 자기 킥커를 맞춰야만 앞섭니다.');
-      } else if (A[1] > B[0] || B[1] > A[0]) {
-        kind = '오버 2장 vs 언더 2장'; t = (A[1] > B[0] ? 'A' : 'B') + '의 두 카드가 모두 높음 (두 오버카드 vs 두 언더카드)';
-      } else if ((A[0] > B[0]) === (A[1] > B[1])) {
-        kind = '사이에 끼는 구도'; t = '두 카드가 각각 한 단계씩 높음 (사이에 끼는 구도)';
-      } else {
-        kind = '하이-로 vs 미들 2장'; t = '높은 카드 1장(' + (A[0] > B[0] ? 'A' : 'B') + ') vs 중간 카드 2장';
-      }
+      if (shared) { kind = 'dom'; type = t('cl.dom'); notes.push(t('cl.dom_note')); }
+      else if (A[1] > B[0] || B[1] > A[0]) { kind = 'two_over'; type = t('cl.two_over', A[1] > B[0] ? 'A' : 'B'); }
+      else if ((A[0] > B[0]) === (A[1] > B[1])) { kind = 'inter'; type = t('cl.inter'); }
+      else { kind = 'hilo'; type = t('cl.hilo', A[0] > B[0] ? 'A' : 'B'); }
     }
-    if (sA && sB && E.suitOf(h1[0]) === E.suitOf(h2[0])) notes.push('두 핸드가 같은 무늬 수딧 → 플러시가 나와도 높은 쪽이 가져가 서로 상쇄됩니다.');
+    if (sA && sB && E.suitOf(h1[0]) === E.suitOf(h2[0])) notes.push(t('cl.same_suit'));
     else {
-      if (sA) notes.push('A는 수딧 → 플러시 가능성만큼 에퀴티가 더해집니다.');
-      if (sB) notes.push('B는 수딧 → 플러시 가능성만큼 에퀴티가 더해집니다.');
+      if (sA) notes.push(t('cl.suited', 'A'));
+      if (sB) notes.push(t('cl.suited', 'B'));
     }
     [['A', A, pA], ['B', B, pB]].forEach(function (x) {
       var g = x[1][0] - x[1][1];
-      if (!x[2] && g >= 1 && g <= 2) notes.push(x[0] + '는 커넥티드(간격 ' + (g - 1) + ') → 스트레이트 가능성이 있습니다.');
+      if (!x[2] && g >= 1 && g <= 2) notes.push(t('cl.connected', x[0], g - 1));
     });
-    return { type: t, kind: kind, notes: notes };
+    return { type: type, kind: kind, notes: notes };
   }
   function topCats(arr, total) {
     var list = [];
     for (var i = 0; i < 9; i++) if (arr[i]) list.push([i, arr[i]]);
     list.sort(function (x, y) { return y[1] - x[1]; });
-    return list.slice(0, 3).map(function (x) { return E.CAT_KO[x[0]] + ' ' + Math.round(x[1] / total * 100) + '%'; }).join(' · ');
+    return list.slice(0, 3).map(function (x) { return catName(x[0]) + ' ' + Math.round(x[1] / total * 100) + '%'; }).join(' · ');
+  }
+  function eqBlock(ka, kb, w, tie, l, ea) {
+    return '<div class="big-eq"><div><div class="k">A · ' + ka + '</div><div class="v a">' + f1(ea) + '%</div></div>' +
+      '<div style="text-align:right"><div class="k">B · ' + kb + '</div><div class="v b">' + f1(100 - ea) + '%</div></div></div>' +
+      '<div class="stack"><div class="a" style="width:' + w + '%">' + (w > 12 ? 'A ' + f1(w) : '') + '</div><div class="t" style="width:' + tie + '%">' + (tie > 11 ? t('mu.tie_s') + ' ' + f1(tie) : '') + '</div><div class="b" style="width:' + l + '%">' + (l > 12 ? 'B ' + f1(l) : '') + '</div></div>' +
+      '<div class="stack-legend"><span class="a">' + t('mu.win', 'A', f1(w)) + '</span><span class="muted">' + t('mu.tie', f1(tie)) + '</span><span class="b">' + t('mu.win', 'B', f1(l)) + '</span></div>';
   }
   M.mu = {
     submit: false,
@@ -651,62 +666,58 @@
         side.appendChild(el('div', 'hand-key', E.handKeyOf(x[1][0], x[1][1])));
         vs.appendChild(side);
       });
-      root.appendChild(panel('PREFLOP 올인 · 보드 5장을 끝까지 볼 때', [vs]));
-      var ch = choices([['A2', '<b>A</b>압도적'], ['A1', '<b>A</b>약간 우세'], ['0', '<b>≈</b>코인플립'], ['B1', '<b>B</b>약간 우세'], ['B2', '<b>B</b>압도적']], 'scale', ctx);
+      root.appendChild(panel(t('mu.street'), [vs]));
+      var ch = choices([['A2', '<b>A</b>' + t('mu.dom')], ['A1', '<b>A</b>' + t('mu.edge')], ['0', '<b>≈</b>' + t('mu.flip')], ['B1', '<b>B</b>' + t('mu.edge')], ['B2', '<b>B</b>' + t('mu.dom')]], 'scale', ctx);
       root.appendChild(ch.el);
-      root.appendChild(el('div', 'scale-legend', '우세한 쪽 승률: 플립 &lt; 58% ≤ 우세 &lt; 70% ≤ 압도'));
+      root.appendChild(el('div', 'scale-legend', t('mu.legend')));
       return { answer: function () { return ch.val() ? { choice: ch.val() } : null; }, lock: function (res, a) { ch.lock(res.accept, a.choice); } };
     },
     judge: function (q, a) {
       var ans = muAnswer(q.sim.eqA);
       return { ok: ans.accept.indexOf(a.choice) >= 0, accept: ans.accept, fav: ans.fav, side: ans.side,
-        correctTxt: ans.accept.map(function (v) { return CHOICE_TXT[v]; }).join(' / '), mineTxt: CHOICE_TXT[a.choice] };
+        correctTxt: ans.accept.map(choiceTxt).join(' / '), mineTxt: choiceTxt(a.choice) };
     },
     explain: function (q, a, res) {
-      var r = q.sim, eqA = r.eqA * 100, eqB = 100 - eqA;
-      var w = r.win * 100, t = r.tie * 100, l = r.lose * 100;
-      var html = step('01', '실제 승률 (몬테카를로)',
-        '<div class="big-eq"><div><div class="k">A · ' + E.handKeyOf(q.A[0], q.A[1]) + '</div><div class="v a">' + f1(eqA) + '%</div></div>' +
-        '<div style="text-align:right"><div class="k">B · ' + E.handKeyOf(q.B[0], q.B[1]) + '</div><div class="v b">' + f1(eqB) + '%</div></div></div>' +
-        '<div class="stack"><div class="a" style="width:' + w + '%">' + (w > 12 ? 'A ' + f1(w) : '') + '</div><div class="t" style="width:' + t + '%">' + (t > 11 ? '무 ' + f1(t) : '') + '</div><div class="b" style="width:' + l + '%">' + (l > 12 ? 'B ' + f1(l) : '') + '</div></div>' +
-        '<div class="stack-legend"><span class="a">A 승 ' + f1(w) + '%</span><span class="muted">무승부 ' + f1(t) + '%</span><span class="b">B 승 ' + f1(l) + '%</span></div>' +
-        '<div class="note">승률(에퀴티) = 승 + 무승부 ÷ 2 · 무작위 보드 <b>' + r.n.toLocaleString() + '회</b> 시뮬레이션 · 표준오차 ±' + (r.se * 100).toFixed(2) + '%p</div>');
+      var r = q.sim, eqA = r.eqA * 100;
+      var html = step('01', t('mu.s1'),
+        eqBlock(E.handKeyOf(q.A[0], q.A[1]), E.handKeyOf(q.B[0], q.B[1]), r.win * 100, r.tie * 100, r.lose * 100, eqA) +
+        note(t('mu.sim_note', b(r.n.toLocaleString()), (r.se * 100).toFixed(2))));
       var fav = res.fav * 100, pos = function (x) { return (x - 50) / 50 * 100; };
-      html += step('02', '구간 판정 — 우세한 쪽(' + res.side + ') ' + f1(fav) + '%',
+      html += step('02', t('mu.s2', res.side, f1(fav)),
         '<div class="zones"><div class="z c" style="left:0;width:' + pos(58) + '%"></div><div class="z s" style="left:' + pos(58) + '%;width:' + (pos(70) - pos(58)) + '%"></div><div class="z d" style="left:' + pos(70) + '%;right:0"></div>' +
         '<div class="mk" style="left:calc(' + Math.min(99.5, pos(fav)) + '% - 1px)"></div>' +
         '<div class="zl" style="left:0;transform:none">50</div><div class="zl" style="left:' + pos(58) + '%">58</div><div class="zl" style="left:' + pos(70) + '%">70</div><div class="zl" style="left:auto;right:0;transform:none">100%</div></div>' +
-        '<div class="note" style="display:flex;justify-content:space-between"><span>코인플립</span><span>약간 우세</span><span>압도적</span></div>' +
-        (res.accept.length > 1 ? '<div class="note">경계(±1.5%p) 근처라 두 답 모두 정답 처리했습니다.</div>' : ''));
+        '<div class="note" style="display:flex;justify-content:space-between"><span>' + t('mu.flip') + '</span><span>' + t('mu.edge') + '</span><span>' + t('mu.dom') + '</span></div>' +
+        (res.accept.length > 1 ? note(t('mu.edge_both')) : ''));
       var c = classify(q.A, q.B);
-      html += step('03', '매치업 유형', '<div class="formula" style="font-family:var(--sans);font-size:14.5px">' + c.type + '</div>' +
-        c.notes.map(function (n) { return '<div class="note">· ' + n + '</div>'; }).join(''));
-      html += step('04', '이길 때 완성 족보 (상위 3)',
-        '<div class="note"><b style="color:var(--accent)">A</b> ' + (r.win ? topCats(r.catA, Math.round(r.win * r.n)) : '—') + '</div>' +
-        '<div class="note"><b style="color:#d8b36a">B</b> ' + (r.lose ? topCats(r.catB, Math.round(r.lose * r.n)) : '—') + '</div>');
+      html += step('03', t('mu.s3'), '<div class="formula" style="font-family:var(--sans);font-size:14.5px">' + c.type + '</div>' +
+        c.notes.map(function (n) { return note('· ' + n); }).join(''));
+      html += step('04', t('mu.s4'),
+        note('<b style="color:var(--accent)">A</b> ' + (r.win ? topCats(r.catA, Math.round(r.win * r.n)) : '—')) +
+        note('<b style="color:#d8b36a">B</b> ' + (r.lose ? topCats(r.catB, Math.round(r.lose * r.n)) : '—')));
       return html;
     },
     line: function (q, a, res) { var e = q.sim.eqA * 100; return 'A ' + f1(e) + '% : B ' + f1(100 - e) + '% → ' + res.correctTxt; },
     summary: function (q) { return E.handKeyOf(q.A[0], q.A[1]) + ' vs ' + E.handKeyOf(q.B[0], q.B[1]); },
+    hint: function (q) { return t('mu.hint', b(t('ck.' + classify(q.A, q.B).kind))); },
     keys: function (q, a, res) {
-      var zone = res.fav < T_FLIP ? '코인플립 구간' : res.fav < T_DOM ? '약간 우세 구간' : '압도적 구간';
-      return [['매치업 유형', classify(q.A, q.B).kind], ['정답 구간', zone]];
+      var zone = res.fav < T_FLIP ? 'k.z_flip' : res.fav < T_DOM ? 'k.z_edge' : 'k.z_dom';
+      return [['g.mutype', 'ck.' + classify(q.A, q.B).kind], ['g.zone', zone]];
     }
   };
 
-  /* ---------- 04 POSITION (레이즈 대응 · BB 디펜스 · 포스트플랍 포지션 · 개념) ---------- */
+  /* ---------- 04 POSITION (vs open · BB defense · postflop position · concepts) ---------- */
   var SEATS = E.SEATS;
-  var POS_KINDS = { vs: '레이즈 대응', bb: 'BB 디펜스', post: '포스트플랍 포지션', concept: '포지션 개념' };
-  var ACT_TXT = { '3bet': '3벳', call: '콜', fold: '폴드' };
   var POST_ORDER = ['SB', 'BB', 'UTG', 'MP', 'HJ', 'CO', 'BTN'];
   var IMPLIED = { IP: 0.30, OOP: 0.15 };
+  function posKind(k) { return t('pk.' + k); }
 
   function pickKind(k) {
     if (k && k !== 'mix') return k;
     var x = E.rand();
     return x < 0.3 ? 'vs' : x < 0.55 ? 'bb' : x < 0.8 ? 'post' : 'concept';
   }
-  function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(E.rand() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+  function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(E.rand() * (i + 1)); var tmp = a[i]; a[i] = a[j]; a[j] = tmp; } return a; }
 
   /* vs open / BB defense */
   function dealVs(kind) {
@@ -732,50 +743,48 @@
       if (p === q.opener) { cls = 'opener'; sub = 'RAISE'; }
       else if (p === q.hero) { cls = 'me'; sub = 'YOU'; }
       else if (i < hi) { cls = 'folded'; sub = 'FOLD'; }
-      else sub = '대기';
+      else sub = t('seat.wait');
       return '<div class="seat ' + cls + '">' + p + '<small>' + sub + '</small></div>';
     }).join(''));
   }
-  function grid3(t, meKey) {
+  function grid3(tb, meKey) {
     var html = '<div class="grid13">';
-    for (var a = 12; a >= 0; a--) for (var b = 12; b >= 0; b--) {
-      var key = a === b ? E.handKey(a, a) : a > b ? E.handKey(a, b, true) : E.handKey(b, a, false);
-      html += '<div class="' + (t.r[key] ? 'r' : t.c[key] ? 'c' : '') + (key === meKey ? ' me' : '') + '">' + key + '</div>';
+    for (var a = 12; a >= 0; a--) for (var bb = 12; bb >= 0; bb--) {
+      var key = a === bb ? E.handKey(a, a) : a > bb ? E.handKey(a, bb, true) : E.handKey(bb, a, false);
+      html += '<div class="' + (tb.r[key] ? 'r' : tb.c[key] ? 'c' : '') + (key === meKey ? ' me' : '') + '">' + key + '</div>';
     }
     return html + '</div>';
   }
   function famTokens(text, key) {
     var pair = key.length === 2;
-    return text.split(',').filter(function (t) {
-      t = t.trim(); if (!t) return false;
-      if (pair) return t[0] === t[1];
-      return t[0] === key[0] && t[1] !== t[0] && t[2] === key[2];
+    return text.split(',').filter(function (tk) {
+      tk = tk.trim(); if (!tk) return false;
+      if (pair) return tk[0] === tk[1];
+      return tk[0] === key[0] && tk[1] !== tk[0] && tk[2] === key[2];
     }).join(', ');
   }
-  function explainVs(q, a, res) {
+  function legend3(rp, cp) {
+    return '<div class="legend3"><span class="r">' + act('3bet') + ' ' + f1(rp) + '%</span><span class="c">' + act('call') + ' ' + f1(cp) + '%</span><span class="f">' + act('fold') + ' ' + f1(100 - rp - cp) + '%</span></div>';
+  }
+  function explainVs(q) {
     var grp = E.vsGroup(q.hero), tk = q.opener + '>' + grp, T = E.VS_OPEN[tk], TX = E.VS_OPEN_TEXT[tk];
-    var fam = q.key.length === 2 ? '포켓 페어' : q.key[0] + 'x ' + (q.key[2] === 's' ? '수딧' : '오프수트');
-    var html = step('01', '판정',
-      '<div class="formula">' + q.key + ' · ' + q.hero + ' vs ' + q.opener + ' 오픈 → <span class="' + (q.act === 'fold' ? 'bd' : q.act === '3bet' ? 'wa' : 'hl') + '">' + ACT_TXT[q.act] + '</span></div>' +
-      '<div class="note">' + fam + ' 기준 — 3벳: <b>' + (famTokens(TX.r, q.key) || '없음') + '</b> · 콜: <b>' + (famTokens(TX.c, q.key) || '없음') + '</b></div>');
+    var html = step('01', t('c.verdict'),
+      '<div class="formula">' + q.key + ' · ' + t('vs.title', q.hero, q.opener) + ' → <span class="' + (q.act === 'fold' ? 'bd' : q.act === '3bet' ? 'wa' : 'hl') + '">' + act(q.act) + '</span></div>' +
+      note(t('vs.fam', famName(q.key), b(famTokens(TX.r, q.key) || t('c.none')), b(famTokens(TX.c, q.key) || t('c.none')))));
     var rp = E.setPct(T.r), cp = E.setPct(T.c);
-    html += step('02', q.hero + ' vs ' + q.opener + ' 레인지',
-      '<div class="legend3"><span class="r">3벳 ' + f1(rp) + '%</span><span class="c">콜 ' + f1(cp) + '%</span><span class="f">폴드 ' + f1(100 - rp - cp) + '%</span></div>' +
-      grid3(T, q.key) + '<div class="note">노란 테두리가 이번 핸드. 앱 기준표(100BB, 2.5BB 오픈)이며 실제 솔버 전략은 혼합 빈도가 섞여 경계 핸드가 조금씩 다릅니다.</div>');
-    var openPct = E.rangePct(q.opener), pts = [];
-    pts.push(q.opener + '의 오픈 레인지는 앱 기준 <b>' + f1(openPct) + '%</b>. 앞자리 오프너일수록 레인지가 강해서 대응 레인지도 좁아집니다.');
+    html += step('02', t('vs.range_title', q.hero, q.opener), legend3(rp, cp) + grid3(T, q.key) + note(t('vs.grid_note')));
+    var pts = [t('vs.p_open', q.opener, b(f1(E.rangePct(q.opener)) + '%'))];
     if (grp === 'IP') {
       var u = E.VS_OPEN['UTG>IP'], c = E.VS_OPEN['CO>IP'];
-      pts.push(q.hero + '는 ' + q.opener + '보다 뒤라 포스트플랍 내내 <b>IP</b>(나중에 액션). 그래서 3벳뿐 아니라 <b>콜 레인지</b>도 가질 수 있어요. (UTG 오픈 대응 3벳+콜 ' + f1(E.setPct(u.r) + E.setPct(u.c)) + '% → CO 오픈 대응 ' + f1(E.setPct(c.r) + E.setPct(c.c)) + '%)');
-      var behind = SEATS.slice(SEATS.indexOf(q.hero) + 1);
-      if (q.hero !== 'BTN') pts.push('뒤에 아직 ' + behind.join('·') + '가 남아 있어 스퀴즈를 맞을 수 있어요. BTN보다는 조금 더 타이트하게 가는 게 보통입니다.');
+      pts.push(t('vs.p_ip', q.hero, q.opener, f1(E.setPct(u.r) + E.setPct(u.c)), f1(E.setPct(c.r) + E.setPct(c.c))));
+      if (q.hero !== 'BTN') pts.push(t('vs.p_behind', SEATS.slice(SEATS.indexOf(q.hero) + 1).join('·')));
     } else if (grp === 'SB') {
-      pts.push('SB는 뒤에 BB가 남아 있고, 플랍부터는 가장 먼저 액션(<b>OOP</b>)합니다. 콜하면 BB의 스퀴즈와 OOP 불리함을 동시에 떠안기 때문에 앱 기준은 <b>3벳 or 폴드</b>(콜 없음).');
+      pts.push(t('vs.p_sb'));
     } else {
-      pts.push('BB는 이미 1BB를 냈고 프리플랍 마지막 액션. 2.5BB 오픈이면 <b>1.5BB</b>만 더 내고 2.5 + 0.5 + 2.5 = <b>5.5BB</b> 팟을 다툼 → 필요 승률 1.5 ÷ 5.5 = <b>27.3%</b>. 그래서 넓게 디펜스합니다.');
-      pts.push('다만 포스트플랍은 OOP라 에퀴티를 다 실현하기 어려워, 연결성·수딧이 없는 약한 오프수트는 버립니다.');
+      pts.push(t('vs.p_bb1'));
+      pts.push(t('vs.p_bb2'));
     }
-    html += step('03', '포지션 포인트', pts.map(function (t) { return '<div class="note">· ' + t + '</div>'; }).join(''));
+    html += step('03', t('vs.s3'), pts.map(function (x) { return note('· ' + x); }).join(''));
     return html;
   }
 
@@ -784,7 +793,7 @@
     return dealDrawSpot('post', 'turn').then(function (q) {
       var a = q.outs, eq = a.rulePct / 100;
       var target = E.rand() < 0.5 ? 'call' : 'fold', wantDiff = E.rand() < 0.55, best = null;
-      for (var t = 0; t < 120; t++) {
+      for (var k = 0; k < 120; k++) {
         var P = 10 * Math.round(8 + E.rand() * 27), f = pick([0.5, 0.66, 0.75, 1]), B = Math.max(10, 10 * Math.round(P * f / 10));
         var S = 10 * Math.round(P * (0.6 + E.rand() * 7.4) / 10), pos = E.rand() < 0.5 ? 'IP' : 'OOP';
         var X = Math.round(S * IMPLIED[pos]);
@@ -808,73 +817,63 @@
     var p = q.post, eq = q.outs.rulePct / 100, X = Math.round(p.S * IMPLIED[pos]);
     return { X: X, ev: eq * (p.P + p.B + X) - (1 - eq) * p.B };
   }
-  function explainPost(q, a, res) {
+  function sgn(x) { return (x >= 0 ? '+' : '') + f1(x); }
+  function explainPost(q) {
     var o = q.outs, p = q.post, eq = o.rulePct / 100;
-    var html = step('01', '아웃츠', outsBreakdown(o));
-    html += step('02', '승률 (1장 남음 → ×2)', equityStepHtml(o, false));
-    html += step('03', '직접 팟 오즈',
+    var html = step('01', t('post.s1'), outsBreakdown(o));
+    html += step('02', t('post.s2'), equityStepHtml(o, false));
+    html += step('03', t('post.s3'),
       '<div class="formula">' + p.B + ' ÷ (' + p.P + ' + ' + p.B + ' + ' + p.B + ') = <span class="wa">' + f1(p.need) + '%</span></div>' +
-      '<div class="note">' + o.rulePct + '% ' + (o.rulePct > p.need ? '&gt;' : '&lt;') + ' ' + f1(p.need) + '% → 직접 오즈만 보면 <b>' + (p.evD > 0 ? '콜' : '폴드') + '</b> (EV ' + (p.evD >= 0 ? '+' : '') + f1(p.evD) + ')</div>');
+      note(o.rulePct + '% ' + (o.rulePct > p.need ? '&gt;' : '&lt;') + ' ' + f1(p.need) + '% → ' + t('post.direct', b(act(p.evD > 0 ? 'call' : 'fold')), sgn(p.evD))));
     var need = p.B * (1 - eq) / eq - (p.P + p.B);
-    html += step('04', '임플라이드 오즈 (' + p.pos + ')',
-      '<div class="formula">추가 수익 X = ' + p.S + ' × ' + Math.round(IMPLIED[p.pos] * 100) + '% = <span class="hl">' + p.X + '</span></div>' +
-      '<div class="formula">EV = ' + o.rulePct + '% × (' + p.P + ' + ' + p.B + ' + ' + p.X + ') − ' + (100 - o.rulePct) + '% × ' + p.B + '<br>= <span class="' + (p.ev > 0 ? 'hl' : 'bd') + '">' + (p.ev >= 0 ? '+' : '') + f1(p.ev) + '</span> → ' + (p.ev > 0 ? '콜' : '폴드') + '</div>' +
-      '<div class="note">손익분기에 필요한 추가 수익 = ' + p.B + ' × (1 − ' + eq.toFixed(2) + ') ÷ ' + eq.toFixed(2) + ' − (' + p.P + ' + ' + p.B + ') = <b>' + (need > 0 ? Math.round(need) : '0 (직접 오즈로 충분)') + '</b></div>');
+    html += step('04', t('post.s4', p.pos),
+      '<div class="formula">' + t('post.x', p.S + ' × ' + Math.round(IMPLIED[p.pos] * 100) + '%', '<span class="hl">' + p.X + '</span>') + '</div>' +
+      '<div class="formula">EV = ' + o.rulePct + '% × (' + p.P + ' + ' + p.B + ' + ' + p.X + ') − ' + (100 - o.rulePct) + '% × ' + p.B + '<br>= <span class="' + (p.ev > 0 ? 'hl' : 'bd') + '">' + sgn(p.ev) + '</span> → ' + act(p.ev > 0 ? 'call' : 'fold') + '</div>' +
+      note(t('post.need', p.B + ' × (1 − ' + eq.toFixed(2) + ') ÷ ' + eq.toFixed(2) + ' − (' + p.P + ' + ' + p.B + ')', b(need > 0 ? Math.round(need) : t('post.need_zero')))));
     var ip = postEV(q, 'IP'), oop = postEV(q, 'OOP');
-    html += step('05', '포지션이 바뀌면?',
-      '<div class="pv"><div class="' + (p.pos === 'IP' ? 'cur' : '') + '"><b>IP</b><span>X ' + ip.X + '</span><span>EV ' + (ip.ev >= 0 ? '+' : '') + f1(ip.ev) + '</span><em class="' + (ip.ev > 0 ? 'y' : 'n') + '">' + (ip.ev > 0 ? '콜' : '폴드') + '</em></div>' +
-      '<div class="' + (p.pos === 'OOP' ? 'cur' : '') + '"><b>OOP</b><span>X ' + oop.X + '</span><span>EV ' + (oop.ev >= 0 ? '+' : '') + f1(oop.ev) + '</span><em class="' + (oop.ev > 0 ? 'y' : 'n') + '">' + (oop.ev > 0 ? '콜' : '폴드') + '</em></div></div>' +
-      '<div class="note">같은 카드·같은 베팅이라도 IP는 리버에서 상대 액션을 보고 베팅 크기를 정할 수 있어 맞았을 때 더 받아낼 수 있고, OOP는 먼저 액션해야 해서 덜 받아냅니다. 앱은 이를 남은 스택의 <b>30% / 15%</b>로 단순화해 가정했어요.</div>');
+    function card(pos, r) {
+      return '<div class="' + (p.pos === pos ? 'cur' : '') + '"><b>' + pos + '</b><span>X ' + r.X + '</span><span>EV ' + sgn(r.ev) + '</span><em class="' + (r.ev > 0 ? 'y' : 'n') + '">' + act(r.ev > 0 ? 'call' : 'fold') + '</em></div>';
+    }
+    html += step('05', t('post.s5'), '<div class="pv">' + card('IP', ip) + card('OOP', oop) + '</div>' + note(t('post.pos_note')));
     return html;
   }
 
-  /* concept quiz */
-  var CONCEPTS = [
-    { q: '포스트플랍(플랍 이후)에서 항상 마지막에 액션하는 자리는?', o: ['BTN', 'BB', 'CO', 'SB'], e: '플랍부터는 SB부터 시계방향으로 액션하고 BTN이 마지막입니다. 그래서 BTN이 가장 좋은 자리예요.' },
-    { q: '프리플랍에서 아무도 레이즈하지 않았을 때 마지막에 액션하는 자리는?', o: ['BB', 'BTN', 'SB', 'UTG'], e: '프리플랍은 UTG부터 시작해 블라인드가 마지막입니다. 모두 림프·폴드해도 BB는 체크나 레이즈할 선택권(옵션)이 있어요.' },
-    { q: 'IP(인 포지션)의 이점이 아닌 것은?', o: ['카드가 더 좋게 들어온다', '상대 액션을 보고 결정할 수 있다', '팟 크기를 조절하기 쉽다', '체크로 무료 카드를 받을 수 있다'], e: '카드 분포는 자리와 무관합니다. IP의 이점은 정보(상대 액션을 먼저 봄)와 컨트롤(팟 크기·무료 카드)에서 나와요.' },
-    { q: 'UTG에서 오픈 레인지를 가장 타이트하게 잡는 주된 이유는?', o: ['뒤에 남은 플레이어가 많고, 콜을 받으면 대부분 OOP라서', 'UTG는 블라인드를 내지 않아서', 'UTG는 오픈 금액이 더 커서', 'UTG가 카드를 먼저 받아서'], e: '뒤에 6명이 남아 있으면 누군가 강한 핸드를 들고 있을 가능성이 커지고, 콜을 받으면 포스트플랍에서도 대부분 불리한 자리입니다.' },
-    { q: 'BB가 오픈에 대해 넓게 디펜스할 수 있는 이유로 가장 알맞은 것은?', o: ['이미 1BB를 냈고 프리플랍 마지막 액션이라 팟 오즈가 좋다', '포스트플랍에서 IP라서', 'BB 핸드가 평균적으로 더 강해서', 'BB는 레이크를 내지 않아서'], e: '2.5BB 오픈이면 1.5BB만 더 내고 5.5BB 팟을 다투므로 필요 승률이 약 27%입니다. 단 포스트플랍은 OOP예요.' },
-    { q: 'SB가 오픈에 대해 콜보다 "3벳 or 폴드"를 선호하는 이유는?', o: ['뒤에 BB가 남아 스퀴즈를 맞을 수 있고, 포스트플랍 내내 OOP라서', 'SB는 콜 금액이 더 비싸서', '규칙상 SB는 콜할 수 없어서', 'SB 3벳은 금액이 더 싸서'], e: 'SB 콜은 BB의 스퀴즈에 노출되고, 팟이 진행되면 항상 먼저 액션해야 합니다. 3벳으로 주도권을 잡거나 접는 쪽이 낫다는 게 일반적인 기준이에요.' },
-    { q: '스틸(steal)이란?', o: ['레이트 포지션(CO·BTN·SB)에서 블라인드를 가져오려는 오픈 레이즈', '블라인드가 림프하는 것', '리버에서 하는 블러프', '프리플랍 올인'], e: '뒤에 블라인드만 남은 자리에서 넓게 오픈해 블라인드를 가져오는 플레이입니다.' },
-    { q: '스퀴즈(squeeze)란?', o: ['누군가 오픈하고 다른 사람이 콜했을 때 하는 3벳', '블라인드끼리의 대결', '포스트플랍 체크레이즈', '리버 오버벳'], e: '콜러는 강한 핸드를 3벳했을 가능성이 낮아(레인지 캡) 압박이 잘 통하고, 오프너는 뒤의 콜러까지 신경 써야 합니다.' },
-    { q: '"콜드 콜(cold call)"의 뜻은?', o: ['아직 팟에 돈을 넣지 않은 상태에서 레이즈를 콜하는 것', '블라인드에서 체크하는 것', '림프한 뒤 레이즈를 콜하는 것', '리버에서 마지막으로 콜하는 것'], e: '블라인드처럼 이미 돈을 넣은 상태가 아니라, 처음부터 레이즈 금액을 통째로 콜하는 것을 말합니다.' },
-    { q: 'OOP에서 드로우를 들고 있을 때 불리한 점은?', o: ['무료 카드를 보기 어렵고, 맞아도 추가 수익을 덜 받아낸다', '아웃츠 수가 줄어든다', '드로우가 완성될 확률이 낮아진다', '팟 오즈 공식이 달라진다'], e: '확률 자체는 같지만, 에퀴티를 실현하기 어렵고 임플라이드 오즈가 줄어듭니다.' },
-    { q: '블라인드 배틀(SB 오픈, BB 콜)에서 포스트플랍 IP는?', o: ['BB', 'SB', '매 스트리트 번갈아 바뀐다', '둘 다 아니다'], e: '플랍부터는 SB가 먼저 액션하므로 BB가 IP입니다.' },
-    { q: 'KTo를 UTG에서는 폴드하고 BTN에서는 오픈하는 이유는?', o: ['BTN은 뒤에 블라인드 2명만 남고 포스트플랍 IP가 보장되어서', 'BTN에서 받은 KTo가 더 강해서', 'UTG는 오픈 금액이 정해져 있어서', 'BTN은 레이크가 없어서'], e: '같은 핸드라도 남은 상대 수와 포지션에 따라 수익성이 달라집니다. 앱 기준표에서 KTo는 CO부터 오픈이에요.' },
-    { q: '3벳 블러프로 A5s 같은 핸드를 자주 쓰는 이유는?', o: ['A를 들고 있어 상대 AA·AK 콤보가 줄고, 콜 받아도 휠 스트레이트·넛 플러시 가능성이 있어서', 'A5s가 AK보다 강해서', '상대가 무조건 폴드해서', '포스트플랍에서 항상 IP가 되어서'], e: '블로커 효과와 플레이어빌리티를 함께 가진 핸드라 3벳 블러프 후보로 많이 쓰입니다.' },
-    { q: 'IP 플레이어가 상대의 체크에 체크로 따라가면 얻는 것은?', o: ['돈을 더 넣지 않고 다음 카드를 본다', '팟이 두 배가 된다', '상대가 폴드한다', '아웃츠가 늘어난다'], e: '마지막에 액션하는 쪽은 체크-체크로 스트리트를 넘겨 무료 카드를 볼 수 있습니다.' },
-    { q: '프리플랍 액션 순서로 맞는 것은?', o: ['UTG → MP → HJ → CO → BTN → SB → BB', 'SB → BB → UTG → MP → HJ → CO → BTN', 'BTN → CO → HJ → MP → UTG → SB → BB', 'UTG → HJ → MP → CO → BTN → SB → BB'], e: '프리플랍은 BB 왼쪽(UTG)부터 시작해 블라인드가 마지막입니다. 플랍부터는 SB부터 시작해요.' },
-    { q: '보통 "레이트 포지션"으로 부르지 않는 자리는?', o: ['MP', 'CO', 'BTN'], e: '레이트 포지션은 보통 CO와 BTN을 말합니다. MP는 미들 포지션이에요.' },
-    { q: '앞자리(UTG) 오픈에 대한 3벳·콜 레인지를 좁혀야 하는 이유는?', o: ['앞자리 오픈 레인지가 더 강하기 때문', '앞자리 오픈 금액이 더 커서', '앞자리는 블러프를 절대 안 해서', '팟이 작아져서'], e: 'UTG는 가장 타이트하게 오픈하므로, 같은 핸드라도 UTG 상대로는 상대적으로 약해집니다.' }
-  ];
+  /* concept quiz (question bank lives in i18n.js → I.concepts()) */
   function dealConcept() {
-    var r = E.rand(), item;
-    if (r < 0.55) {
-      var c = CONCEPTS[Math.floor(E.rand() * CONCEPTS.length)];
-      item = { q: c.q, opts: c.o.slice(), ans: c.o[0], e: c.e, gen: false };
+    var bank = I.concepts(), item;
+    if (E.rand() < 0.55) {
+      var idx = Math.floor(E.rand() * bank.length), c = bank[idx];
+      item = { ci: idx, opts: c.o.map(function (_, i) { return String(i); }), ans: '0', gen: false };
     } else {
       var g = pick(['postFirst', 'postLast', 'preFirst', 'next']);
       if (g === 'next') {
         var s = pick(SEATS), nx = SEATS[(SEATS.indexOf(s) + 1) % SEATS.length];
         var wrong = shuffle(SEATS.filter(function (p) { return p !== nx && p !== s; })).slice(0, 3);
-        item = { q: s + ' 바로 다음(왼쪽) 자리는?', opts: [nx].concat(wrong), ans: nx, e: '테이블 순서: UTG → MP → HJ → CO → BTN → SB → BB → (다시 UTG). ' + s + '의 왼쪽은 ' + nx + '입니다.', gen: true, order: SEATS, hl: [s, nx] };
+        item = { g: g, s: s, opts: [nx].concat(wrong), ans: nx, gen: true, order: SEATS, hl: [s, nx] };
       } else {
         var pickd = shuffle(SEATS).slice(0, 3);
         var order = g === 'preFirst' ? SEATS : POST_ORDER;
         var sorted = pickd.slice().sort(function (x, y) { return order.indexOf(x) - order.indexOf(y); });
-        var ans = g === 'postLast' ? sorted[2] : sorted[0];
-        var list = sorted.slice().sort(function (x, y) { return SEATS.indexOf(x) - SEATS.indexOf(y); }).join(', ');
-        var qtxt = g === 'preFirst' ? '프리플랍에서 ' + list + ' 중 가장 먼저 액션하는 사람은?'
-          : list + ' 셋이 플랍을 봤다. ' + (g === 'postFirst' ? '플랍에서 가장 먼저 액션하는 사람은?' : '가장 마지막에 액션하는(IP) 사람은?');
-        item = { q: qtxt, opts: pickd, ans: ans, gen: true, order: order, hl: pickd,
-          e: (g === 'preFirst' ? '프리플랍 순서: ' : '플랍 이후 순서: ') + order.join(' → ') + '. 이 셋의 순서는 ' + sorted.join(' → ') + '.' };
+        item = { g: g, opts: pickd, ans: g === 'postLast' ? sorted[2] : sorted[0], gen: true, order: order, hl: pickd, sorted: sorted };
       }
     }
     item.opts = shuffle(item.opts);
     item.kind = 'concept';
     item.hole = []; item.img = {}; item.source = 'local';
     return Promise.resolve(item);
+  }
+  function conceptText(q) {                  // → { q, opt(v), e }
+    if (!q.gen) {
+      var c = I.concepts()[q.ci] || I.concepts()[0];
+      return { q: c.q, opt: function (v) { return c.o[+v]; }, e: c.e };
+    }
+    var same = function (v) { return v; };
+    if (q.g === 'next') {
+      return { q: t('cq.next_q', q.s), opt: same, e: t('cq.next_e', 'UTG → MP → HJ → CO → BTN → SB → BB', q.s, q.ans) };
+    }
+    var list = q.sorted.slice().sort(function (x, y) { return SEATS.indexOf(x) - SEATS.indexOf(y); }).join(', ');
+    var qq = q.g === 'preFirst' ? t('cq.pre_first', list) : t(q.g === 'postFirst' ? 'cq.post_first' : 'cq.post_last', list);
+    return { q: qq, opt: same, e: t(q.g === 'preFirst' ? 'cq.order_pre' : 'cq.order_post', q.order.join(' → '), q.sorted.join(' → ')) };
   }
 
   M.pos = {
@@ -887,70 +886,112 @@
     render: function (root, q, ctx) {
       var ch;
       if (q.kind === 'concept') {
-        root.appendChild(panel('CONCEPT · 포지션 개념', [el('div', 'concept-q', q.q)]));
-        ch = choices(q.opts.map(function (o) { return [o, o]; }), 'choices list', ctx);
+        var ct = conceptText(q);
+        root.appendChild(panel('CONCEPT · ' + posKind('concept'), [el('div', 'concept-q', ct.q)]));
+        ch = choices(q.opts.map(function (o) { return [o, ct.opt(o)]; }), 'choices list', ctx);
       } else if (q.kind === 'post') {
         var p = q.post;
         var pn = drawPanel(q, false, null);
-        pn.querySelector('.street').innerHTML = 'TURN · 남은 카드 <b>1장</b> · 당신 <span class="posb ' + p.pos.toLowerCase() + '">' + p.pos + '</span> ' + (p.pos === 'IP' ? '(상대보다 나중에 액션)' : '(상대보다 먼저 액션)');
+        pn.querySelector('.street').innerHTML = 'TURN · ' + t('sl.left1') + ' · ' + t('post.you') + ' <span class="posb ' + p.pos.toLowerCase() + '">' + p.pos + '</span> ' + t(p.pos === 'IP' ? 'post.ip_sub' : 'post.oop_sub');
         root.appendChild(pn);
-        root.appendChild(el('div', 'money',
-          '<div><div class="k">팟 (베팅 전)</div><div class="v">' + p.P + '</div></div>' +
-          '<div><div class="k">상대 베팅</div><div class="v">' + p.B + '</div><div class="s">팟의 ' + Math.round(p.B / p.P * 100) + '%</div></div>' +
-          '<div><div class="k">남은 스택</div><div class="v">' + p.S + '</div><div class="s">콜한 뒤</div></div>'));
-        root.appendChild(el('div', 'assume', '가정: 상대 탑페어 · 맞으면 리버에서 추가로 받아낼 금액 = 남은 스택 × <b>IP 30%</b> / <b>OOP 15%</b> · 실전식 아웃츠 ×2'));
-        ch = choices([['fold', '폴드'], ['call', '콜']], 'choices two', ctx);
+        root.appendChild(moneyCells([
+          [t('m.pot'), p.P],
+          [t('m.bet'), p.B, t('m.of_pot', Math.round(p.B / p.P * 100))],
+          [t('m.stack'), p.S, t('m.after_call')]
+        ]));
+        root.appendChild(el('div', 'assume', t('post.assume')));
+        ch = choices([['fold', act('fold')], ['call', act('call')]], 'choices two', ctx);
       } else {
         var info = el('div', 'hand-key', q.key + ' <span class="muted">· ' + keyDesc(q.key) + '</span>');
-        root.appendChild(panel('PREFLOP · ' + q.opener + ' <b>2.5BB 오픈</b> · 100BB', [seatStrip(q), el('div', 'row-label', 'HERO · ' + q.hero), cardRow('hole', q.hole, q.img), info]));
-        ch = choices([['fold', '폴드'], ['call', '콜'], ['3bet', '3벳']], 'choices three', ctx);
+        root.appendChild(panel('PREFLOP · ' + t('vs.street', q.opener), [seatStrip(q), el('div', 'row-label', 'HERO · ' + q.hero), cardRow('hole', q.hole, q.img), info]));
+        ch = choices([['fold', act('fold')], ['call', act('call')], ['3bet', act('3bet')]], 'choices three', ctx);
       }
       root.appendChild(ch.el);
       return { answer: function () { return ch.val() ? { choice: ch.val() } : null; }, lock: function (res, a) { ch.lock([res.correct], a.choice); } };
     },
     judge: function (q, a) {
       var correct = q.kind === 'concept' ? q.ans : q.kind === 'post' ? (q.post.ev > 0 ? 'call' : 'fold') : q.act;
-      var lab = function (v) { return q.kind === 'concept' ? v : (ACT_TXT[v] || v); };
+      var lab = q.kind === 'concept' ? conceptText(q).opt : act;
       return { ok: a.choice === correct, correct: correct, correctTxt: lab(correct), mineTxt: lab(a.choice) };
     },
     explain: function (q, a, res) {
-      if (q.kind === 'post') return explainPost(q, a, res);
+      if (q.kind === 'post') return explainPost(q);
       if (q.kind === 'concept') {
-        var body = '<div class="note" style="font-size:13.5px;color:var(--text)">' + q.e + '</div>';
+        var body = '<div class="note" style="font-size:13.5px;color:var(--text)">' + conceptText(q).e + '</div>';
         if (q.order) body += '<div class="order">' + q.order.map(function (p, i) { return '<span class="' + (q.hl.indexOf(p) >= 0 ? 'h' : '') + (p === q.ans ? ' a' : '') + '"><small>' + (i + 1) + '</small>' + p + '</span>'; }).join('') + '</div>';
-        return step('01', '해설', body);
+        return step('01', t('c.explain'), body);
       }
-      return explainVs(q, a, res);
+      return explainVs(q);
     },
     line: function (q, a, res) {
-      if (q.kind === 'concept') return '정답: ' + res.correctTxt;
-      if (q.kind === 'post') { var p = q.post; return '정답 ' + res.correctTxt + ' · 직접 ' + q.outs.rulePct + '% vs ' + f1(p.need) + '% · ' + p.pos + ' EV ' + (p.ev >= 0 ? '+' : '') + Math.round(p.ev); }
-      return q.key + ' · ' + q.hero + ' vs ' + q.opener + ' → ' + res.correctTxt;
+      if (q.kind === 'concept') return t('c.answer_is', res.correctTxt);
+      if (q.kind === 'post') { var p = q.post; return t('post.line', res.correctTxt, q.outs.rulePct, f1(p.need), p.pos, (p.ev >= 0 ? '+' : '') + Math.round(p.ev)); }
+      return q.key + ' · ' + t('vs.title', q.hero, q.opener) + ' → ' + res.correctTxt;
+    },
+    hint: function (q) {
+      if (q.kind === 'concept') return null;
+      if (q.kind === 'post') return t('post.hint', b(f1(q.post.need) + '%'));
+      var T = E.VS_OPEN[q.opener + '>' + E.vsGroup(q.hero)];
+      return t('vs.hint', t('vs.title', q.hero, q.opener), b(f1(E.setPct(T.r)) + '%'), b(f1(E.setPct(T.c)) + '%'));
     },
     summary: function (q) {
-      if (q.kind === 'concept') return q.q.length > 34 ? q.q.slice(0, 34) + '…' : q.q;
-      if (q.kind === 'post') return '턴 ' + q.post.pos + ' · ' + cardsTxt(q.hole) + ' · ' + q.outs.count + '아웃';
-      return q.hero + ' vs ' + q.opener + ' · ' + q.key;
+      if (q.kind === 'concept') { var s = conceptText(q).q; return s.length > 40 ? s.slice(0, 40) + '…' : s; }
+      if (q.kind === 'post') return t('w.turn') + ' ' + q.post.pos + ' · ' + cardsTxt(q.hole) + ' · ' + t('u.outs', q.outs.count);
+      return t('vs.title', q.hero, q.opener) + ' · ' + q.key;
     },
-    keys: function (q, a, res) {
-      var k = [['상황', POS_KINDS[q.kind]]];
+    keys: function (q) {
+      var k = [['g.situation', 'pk.' + q.kind]];
       if (q.kind === 'vs' || q.kind === 'bb') {
-        k.push(['정답 액션', { '3bet': '3벳이 정답', call: '콜이 정답', fold: '폴드가 정답' }[q.act]]);
-        k.push([q.kind === 'bb' ? 'BB가 상대한 오프너' : '내 자리', q.kind === 'bb' ? q.opener : q.hero]);
+        k.push(['g.action', 'k.' + q.act + '_ok']);
+        k.push([q.kind === 'bb' ? 'g.bb_opener' : 'g.myseat', q.kind === 'bb' ? q.opener : q.hero]);
       } else if (q.kind === 'post') {
-        k.push(['포지션', q.post.pos]);
-        k.push(['판단 근거', q.post.ev > 0 ? (q.post.evD > 0 ? '직접 오즈로 콜' : '임플라이드로 콜') : '폴드']);
-      } else k.push(['문제 종류', q.gen ? '액션 순서' : '개념']);
+        k.push(['g.pos', q.post.pos]);
+        k.push(['g.basis', q.post.ev > 0 ? (q.post.evD > 0 ? 'k.direct_call' : 'k.implied_call') : 'k.fold']);
+      } else k.push(['g.qkind', q.gen ? 'k.order' : 'k.concept']);
       return k;
     }
   };
 
   /* =========================================================
-     Practice tabs (01–04)
+     Ads bridge — native side (Android Studio build) exposes window.HoldemAds.
+     No bridge (personal APK / iPhone web) → no ads, rewarded features are free.
+       · banner        : guide, challenge home & results only (never on question screens)
+       · interstitial  : challenge results → "again / modes", after 3+ runs, every 2 runs, ≥3 min apart
+       · rewarded      : survival revive (once), practice hint — always optional
+     ========================================================= */
+  var Ads = (function () {
+    var B = window.HoldemAds, on = false;
+    try { on = !!(B && B.available && B.available()); } catch (e) { on = false; }
+    var cbs = {}, seq = 0, bannerOn = null;
+    window.__adResult = function (id, ok) { var f = cbs[id]; delete cbs[id]; if (f) f(!!ok); };
+    function call(method, done, fallback) {
+      if (!on) { done(fallback); return; }
+      var id = 'a' + (++seq); cbs[id] = done;
+      setTimeout(function () { if (cbs[id]) { delete cbs[id]; done(fallback && method !== 'showRewarded'); } }, 45000);
+      try { B[method](id); } catch (e) { delete cbs[id]; done(false); }
+    }
+    return {
+      on: on,
+      banner: function (show) { if (!on || bannerOn === show) return; bannerOn = show; try { B.setBanner(!!show); } catch (e) { /* ignore */ } },
+      interstitial: function (done) { call('showInterstitial', done, false); },
+      rewarded: function (done) { call('showRewarded', done, true); }
+    };
+  })();
+  function updateBanner() { Ads.banner(activeTab === 'guide' || (activeTab === 'ch' && !run) || (activeTab === 'daily' && !!DQ && dailyDone(DQ.k) && DQ.a.length >= 5)); }
+  function maybeInterstitial(then) {
+    var a = store.ads, now = Date.now();
+    if (!Ads.on || a.runs < 3 || a.runs - a.lastRun < 2 || now - a.lastAt < 180000) { then(); return; }
+    a.lastRun = a.runs; a.lastAt = now; save();
+    Ads.interstitial(function () { then(); });
+  }
+  function adLabel(key) { return Ads.on ? t('ad.watch', t(key)) : t(key); }
+
+  /* =========================================================
+     Practice tabs
      ========================================================= */
   function setBtn(btn, mode) {
     btn.classList.toggle('next', mode === 'next');
-    btn.textContent = mode === 'next' ? '다음 문제 →' : mode === 'loading' ? '카드 받는 중…' : '정답 확인';
+    btn.textContent = mode === 'next' ? t('btn.next') : mode === 'loading' ? t('c.dealing') : t('btn.check');
   }
   function showExplain(box, html) {
     box.innerHTML = html; box.hidden = false;
@@ -959,9 +1000,25 @@
   function Practice(type) {
     var sec = $('tab-' + type), root = sec.querySelector('.qroot'), btn = sec.querySelector('.primary'), ex = sec.querySelector('.explain');
     var phase = 'idle', q = null, ctrl = null, t0 = 0, token = 0;
+    var hintRow = el('div', 'hint-row'); hintRow.hidden = true;
+    sec.insertBefore(hintRow, btn);
+    setBtn(btn, 'check');
+    function drawHint() {
+      var h = q && M[type].hint ? M[type].hint(q) : null;
+      if (!h) { hintRow.hidden = true; return; }
+      hintRow.hidden = false;
+      hintRow.innerHTML = '<button type="button" class="hint-btn">' + adLabel('hint.btn') + '</button>';
+      hintRow.firstChild.addEventListener('click', function () {
+        var bt = this; if (phase !== 'ask') return; bt.disabled = true; bt.textContent = Ads.on ? t('ad.loading') : t('hint.btn');
+        Ads.rewarded(function (ok) {
+          if (!ok) { bt.disabled = false; bt.textContent = t('ad.fail_retry'); return; }
+          hintRow.innerHTML = '<div class="hint-box"><b>' + t('hint.btn') + '</b> ' + h + '</div>';
+        });
+      });
+    }
     function next() {
       var my = ++token;
-      phase = 'loading'; btn.disabled = true; setBtn(btn, 'loading'); ex.hidden = true; skeleton(root);
+      phase = 'loading'; btn.disabled = true; setBtn(btn, 'loading'); ex.hidden = true; skeleton(root); hintRow.hidden = true; q = null;
       M[type].deal(true).then(function (qq) {
         if (my !== token) return;
         q = qq; root.innerHTML = '';
@@ -971,6 +1028,7 @@
           onSubmit: function () { if (phase === 'ask' && !btn.disabled) check(); }
         });
         phase = 'ask'; setBtn(btn, 'check'); btn.disabled = true; t0 = Date.now();
+        drawHint();
       });
     }
     function check() {
@@ -979,6 +1037,7 @@
       record(type, res.ok);
       logAnswer(type, q, a, res, Date.now() - t0, 'practice');
       ctrl.lock(res, a);
+      var hb = hintRow.querySelector('.hint-btn'); if (hb) hintRow.hidden = true;
       showExplain(ex, verdictHtml(res) + M[type].explain(q, a, res) + seeHtml(type, q));
       phase = 'shown'; setBtn(btn, 'next'); btn.disabled = false;
     }
@@ -987,13 +1046,13 @@
   }
 
   /* =========================================================
-     05 CHALLENGE
+     CHALLENGE
      ========================================================= */
   var MODES = {
-    survival: { en: 'SURVIVAL', name: '서바이벌', desc: '틀리면 바로 끝. 몇 문제 연속으로 맞히나', better: 'max', fmt: function (v) { return v + '연속'; } },
-    attack: { en: 'TIME ATTACK', name: '타임 어택 60초', desc: '60초 안에 최대한 많이. 오답은 −5초', better: 'max', fmt: function (v) { return v + '문제'; } },
-    sprint: { en: 'SPRINT 10', name: '스프린트', desc: '10문제 완주 시간. 오답 1개당 +10초', better: 'min', fmt: function (v) { return fmtTime(v); } },
-    review: { en: 'REVIEW', name: '오답 복습', desc: '틀렸던 문제 다시 풀기. 맞히면 노트에서 지워짐' }
+    survival: { en: 'SURVIVAL', better: 'max', fmt: function (v) { return t('u.streak', v); } },
+    attack: { en: 'TIME ATTACK', better: 'max', fmt: function (v) { return t('u.solved', v); } },
+    sprint: { en: 'SPRINT 10', better: 'min', fmt: function (v) { return fmtTime(v); } },
+    review: { en: 'REVIEW' }
   };
   var ATTACK_MS = 60000, ATTACK_PEN = 5000, SPRINT_N = 10, SPRINT_PEN = 10000;
   var run = null;
@@ -1002,60 +1061,64 @@
   function recKey(mode, type) { return mode + ':' + type; }
   function bestOf(mode, type) { var v = store.records[recKey(mode, type)]; return v === undefined ? null : v; }
   function notesFor(type) { return store.notes.filter(function (n) { return type === 'mix' || n.t === type; }); }
+  function todayStrip(n, ok, avgMs, firstKey, firstVal) {
+    return '<div class="today">' +
+      '<div><div class="k">' + t(firstKey) + '</div><div class="v">' + firstVal + '</div></div>' +
+      '<div><div class="k">' + t(n === null ? 'ch.today_acc' : 'st.acc') + '</div><div class="v">' + (ok !== null ? ok + '<small>%</small>' : '–') + '</div></div>' +
+      '<div><div class="k">' + t('ch.avg') + '</div><div class="v">' + (avgMs !== null ? (avgMs / 1000).toFixed(1) + '<small>' + t('u.s') + '</small>' : '–') + '</div></div></div>';
+  }
 
   function renderHome() {
     var type = store.settings.chType;
     var home = $('chHome');
-    var chips = ['mix'].concat(TYPES).map(function (t) {
-      return '<button type="button" data-t="' + t + '" class="' + (t === type ? 'on' : '') + '">' + TYPE_NAME[t] + '</button>';
+    var chips = ['mix'].concat(TYPES).map(function (k) {
+      return '<button type="button" data-t="' + k + '" class="' + (k === type ? 'on' : '') + '">' + typeName(k) + '</button>';
     }).join('');
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var tl = store.log.filter(function (e) { return e.ts >= today.getTime(); });
     var tOk = tl.filter(function (e) { return e.ok; }).length;
-    var tMs = tl.length ? tl.reduce(function (s, e) { return s + e.ms; }, 0) / tl.length : 0;
-    var html = '<div class="today">' +
-      '<div><div class="k">오늘 푼 문제</div><div class="v">' + tl.length + '</div></div>' +
-      '<div><div class="k">오늘 정확도</div><div class="v">' + (tl.length ? Math.round(tOk / tl.length * 100) + '<small>%</small>' : '–') + '</div></div>' +
-      '<div><div class="k">평균 응답</div><div class="v">' + (tl.length ? (tMs / 1000).toFixed(1) + '<small>초</small>' : '–') + '</div></div></div>' +
+    var tMs = tl.length ? tl.reduce(function (s, e) { return s + e.ms; }, 0) / tl.length : null;
+    var html = dailyCardHtml() + todayStrip(null, tl.length ? Math.round(tOk / tl.length * 100) : null, tMs, 'ch.today_n', tl.length) +
       '<div class="goal"><div class="gl"></div><div class="gbar"><i></i></div><div class="gs"></div></div>';
-    html += '<div class="sec-h"><span>문제 유형</span></div><div class="type-chips">' + chips + '</div>';
+    html += '<div class="sec-h"><span>' + t('ch.types') + '</span></div><div class="type-chips">' + chips + '</div>';
     html += '<div class="modes">' + Object.keys(MODES).map(function (k) {
       var m = MODES[k], best, sub;
-      if (k === 'review') { var n = notesFor(type).length; best = n + '문제'; sub = '남은 오답'; }
-      else { var b = bestOf(k, type); best = b === null ? '—' : m.fmt(b); sub = '최고 기록'; }
+      if (k === 'review') { best = t('u.qs', notesFor(type).length); sub = t('ch.left_notes'); }
+      else { var bv = bestOf(k, type); best = bv === null ? '—' : m.fmt(bv); sub = t('ch.best'); }
       var dis = k === 'review' && !notesFor(type).length;
-      return '<button type="button" class="mode" data-mode="' + k + '"' + (dis ? ' disabled' : '') + '><span class="en">' + m.en + '</span><span class="nm">' + m.name + '</span><span class="ds">' + m.desc + '</span><span class="best"><small>' + sub + '</small>' + best + '</span></button>';
+      return '<button type="button" class="mode" data-mode="' + k + '"' + (dis ? ' disabled' : '') + '><span class="en">' + m.en + '</span><span class="nm">' + t('mode.' + k) + '</span><span class="ds">' + t('mode.' + k + '_d') + '</span><span class="best"><small>' + sub + '</small>' + best + '</span></button>';
     }).join('') + '</div>';
 
-    // records table
-    html += '<div class="sec-h"><span>최고 기록</span></div><div class="rec"><div class="h"></div><div class="h">서바이벌</div><div class="h">타임어택</div><div class="h">스프린트</div>' +
-      ['mix'].concat(TYPES).map(function (t) {
-        return '<div class="r' + (t === type ? ' cur' : '') + '">' + TYPE_NAME[t] + '</div>' + ['survival', 'attack', 'sprint'].map(function (m) {
-          var v = bestOf(m, t); return '<div class="' + (t === type ? 'cur' : '') + '">' + (v === null ? '<span class="faint">—</span>' : MODES[m].fmt(v)) + '</div>';
+    html += '<div class="sec-h"><span>' + t('ch.best') + '</span></div><div class="rec"><div class="h"></div><div class="h">' + t('mode.survival') + '</div><div class="h">' + t('mode.attack_s') + '</div><div class="h">' + t('mode.sprint') + '</div>' +
+      ['mix'].concat(TYPES).map(function (k) {
+        return '<div class="r' + (k === type ? ' cur' : '') + '">' + typeName(k) + '</div>' + ['survival', 'attack', 'sprint'].map(function (m) {
+          var v = bestOf(m, k); return '<div class="' + (k === type ? 'cur' : '') + '">' + (v === null ? '<span class="faint">—</span>' : MODES[m].fmt(v)) + '</div>';
         }).join('');
       }).join('') + '</div>';
 
-    html += '<div class="sec-h"><span>약점 분석</span><span class="faint">최근 ' + store.log.length + '문제 · 연습+챌린지</span></div>' + analysisHtml(type);
+    html += '<div class="sec-h"><span>' + t('an.title') + '</span><span class="faint">' + t('an.sub', store.log.length) + '</span></div>' + analysisHtml(type);
     html += '<div class="danger-row"><span class="wrap-a"></span><span class="wrap-b"></span></div>';
     home.innerHTML = html;
     renderGoal();
+    wireDailyCard(home, renderHome);
 
-    home.querySelectorAll('.type-chips button').forEach(function (b) {
-      b.addEventListener('click', function () { store.settings.chType = b.getAttribute('data-t'); save(); renderHome(); });
+    home.querySelectorAll('.type-chips button').forEach(function (bt) {
+      bt.addEventListener('click', function () { store.settings.chType = bt.getAttribute('data-t'); save(); renderHome(); });
     });
-    home.querySelectorAll('.mode').forEach(function (b) {
-      b.addEventListener('click', function () { startRun(b.getAttribute('data-mode'), store.settings.chType); });
+    home.querySelectorAll('.mode').forEach(function (bt) {
+      bt.addEventListener('click', function () { startRun(bt.getAttribute('data-mode'), store.settings.chType); });
     });
-    confirmButton(home.querySelector('.wrap-a'), '분석 기록 지우기', function () { store.log = []; save(); renderHome(); });
-    confirmButton(home.querySelector('.wrap-b'), '오답 노트 비우기', function () { store.notes = []; save(); renderChAcc(); renderHome(); });
+    confirmButton(home.querySelector('.wrap-a'), t('an.clear_log'), function () { store.log = []; save(); renderHome(); });
+    confirmButton(home.querySelector('.wrap-b'), t('an.clear_notes'), function () { store.notes = []; save(); renderChAcc(); renderHome(); });
   }
 
+  var DIR = { pot: ['k.call_ok', 'k.fold_ok'], pre: ['k.open_ok', 'k.fold_ok'] };
   function analysisHtml(type) {
     var types = type === 'mix' ? TYPES : [type];
     var out = '';
-    types.forEach(function (t) {
-      var L = store.log.filter(function (e) { return e.t === t; });
-      if (!L.length) { out += '<div class="an-card"><div class="an-h"><b>' + TYPE_NAME[t] + '</b><span class="faint">아직 기록 없음</span></div></div>'; return; }
+    types.forEach(function (tp) {
+      var L = store.log.filter(function (e) { return e.t === tp; });
+      if (!L.length) { out += '<div class="an-card"><div class="an-h"><b>' + typeName(tp) + '</b><span class="faint">' + t('an.empty') + '</span></div></div>'; return; }
       var ok = L.filter(function (e) { return e.ok; }).length;
       var avg = L.reduce(function (s, e) { return s + e.ms; }, 0) / L.length;
       var groups = {}, order = [];
@@ -1067,32 +1130,26 @@
           c.n++; c.ok += e.ok; c.ms += e.ms;
         });
       });
-      var html = '<div class="an-card"><div class="an-h"><b>' + TYPE_NAME[t] + '</b><span>' + L.length + '문제 · ' + Math.round(ok / L.length * 100) + '% · 평균 ' + (avg / 1000).toFixed(1) + '초</span></div>';
+      var html = '<div class="an-card"><div class="an-h"><b>' + typeName(tp) + '</b><span>' + t('an.head', L.length, Math.round(ok / L.length * 100), (avg / 1000).toFixed(1)) + '</span></div>';
       var weakest = null;
       order.forEach(function (g) {
-        var rows = Object.keys(groups[g]).map(function (k) { var c = groups[g][k]; return { k: k, n: c.n, acc: c.ok / c.n, ms: c.ms / c.n }; });
+        var rows = Object.keys(groups[g]).map(function (k) { var c = groups[g][k]; return { k: k, n: c.n, acc: c.ok / c.n }; });
         rows.sort(function (x, y) { return x.acc - y.acc || y.n - x.n; });
-        html += '<div class="an-g">' + g + '</div>';
+        html += '<div class="an-g">' + t(g) + '</div>';
         rows.forEach(function (r) {
           var p = Math.round(r.acc * 100), cls = p < 60 ? 'lo' : p < 80 ? 'mid' : '';
-          html += '<div class="an-row"><span class="lb">' + r.k + '</span><span class="an-bar ' + cls + '"><i style="width:' + p + '%"></i></span><span class="pc">' + p + '%<small> ' + r.n + '</small></span></div>';
-          if (r.n >= 4 && g !== '정답 방향' && (!weakest || r.acc < weakest.acc)) weakest = { g: g, k: r.k, acc: r.acc, n: r.n };
+          html += '<div class="an-row"><span class="lb">' + t(r.k) + '</span><span class="an-bar ' + cls + '"><i style="width:' + p + '%"></i></span><span class="pc">' + p + '%<small> ' + r.n + '</small></span></div>';
+          if (r.n >= 4 && g !== 'g.dir' && g !== '정답 방향' && (!weakest || r.acc < weakest.acc)) weakest = { g: g, k: r.k, acc: r.acc, n: r.n };
         });
       });
       var ins = [];
-      if (weakest && weakest.acc < 0.85) ins.push('가장 약한 상황: <b>' + weakest.k + '</b> (' + weakest.g + ') — 정확도 ' + Math.round(weakest.acc * 100) + '%, ' + weakest.n + '문제');
-      var dir = groups['정답 방향'];
-      if (dir) {
-        var pairs = t === 'pot' ? ['콜이 정답', '폴드가 정답'] : t === 'pre' ? ['오픈이 정답', '폴드가 정답'] : null;
-        if (pairs && dir[pairs[0]] && dir[pairs[1]] && dir[pairs[0]].n >= 4 && dir[pairs[1]].n >= 4) {
-          var a0 = dir[pairs[0]].ok / dir[pairs[0]].n, a1 = dir[pairs[1]].ok / dir[pairs[1]].n;
-          if (Math.abs(a0 - a1) >= 0.15) {
-            if (t === 'pot') ins.push(a0 < a1 ? '콜해야 할 때 폴드하는 경향 — 드로우 승률을 낮게 보거나 필요 승률을 높게 계산하고 있을 수 있어요.' : '폴드해야 할 때 콜하는 경향 — 팟 오즈 분모에 내 콜 금액까지 넣었는지 확인해 보세요.');
-            else ins.push(a0 < a1 ? '오픈해야 할 핸드를 버리는 경향 — 레인지를 실제보다 타이트하게 잡고 있어요.' : '폴드해야 할 핸드를 여는 경향 — 레인지를 실제보다 루즈하게 잡고 있어요.');
-          }
-        }
+      if (weakest && weakest.acc < 0.85) ins.push(t('an.weak', b(t(weakest.k)), t(weakest.g), Math.round(weakest.acc * 100), weakest.n));
+      var dir = groups['g.dir'], pairs = DIR[tp];
+      if (dir && pairs && dir[pairs[0]] && dir[pairs[1]] && dir[pairs[0]].n >= 4 && dir[pairs[1]].n >= 4) {
+        var a0 = dir[pairs[0]].ok / dir[pairs[0]].n, a1 = dir[pairs[1]].ok / dir[pairs[1]].n;
+        if (Math.abs(a0 - a1) >= 0.15) ins.push(t('an.bias_' + tp + (a0 < a1 ? '_tight' : '_loose')));
       }
-      if (L.length < 10) ins.push('10문제 이상 쌓이면 분석이 더 믿을 만해집니다.');
+      if (L.length < 10) ins.push(t('an.more'));
       html += ins.map(function (s) { return '<div class="insight">' + s + '</div>'; }).join('');
       out += html + '</div>';
     });
@@ -1110,6 +1167,7 @@
     }
     run = { mode: mode, type: type, items: [], score: 0, wrong: 0, active: 0, pen: 0, phase: 'loading', queue: queue, total: queue ? queue.length : 0, nextP: null, last: performance.now(), quitArm: false };
     $('chHome').hidden = true; $('chEnd').hidden = true; $('chRun').hidden = false;
+    Ads.banner(false);
     window.scrollTo(0, 0);
     prefetch(); nextQ();
   }
@@ -1118,27 +1176,27 @@
     if (r.mode === 'review') {
       var n = r.queue.shift();
       if (!n) { r.nextP = null; return; }
-      var q = JSON.parse(JSON.stringify(n.q));
+      var q = refreshOuts(n.t, JSON.parse(JSON.stringify(n.q)));
       r.nextP = preload(M[n.t].cards(q), q.img).then(function () { return { t: n.t, q: q }; });
       return;
     }
-    var t = pickType(r.type);
-    r.nextP = M[t].deal().then(function (q) { return { t: t, q: q }; });
+    var tp = pickType(r.type);
+    r.nextP = M[tp].deal().then(function (q) { return { t: tp, q: q }; });
   }
   function runBar() {
     var r = run, m = MODES[r.mode], big = '', sub = '';
-    if (r.mode === 'attack') { var left = Math.max(0, ATTACK_MS - r.active - r.pen); big = (left / 1000).toFixed(1); sub = '정답 ' + r.score + ' · 오답 ' + r.wrong; }
-    else if (r.mode === 'sprint') { big = fmtTime(r.active + r.pen); sub = Math.min(r.items.length + (r.phase === 'answer' ? 1 : 0), SPRINT_N) + ' / ' + SPRINT_N + (r.wrong ? ' · 오답 ' + r.wrong : ''); }
-    else if (r.mode === 'survival') { big = r.score; sub = '연속 정답'; }
-    else { big = r.items.length + ' / ' + r.total; sub = '맞힘 ' + r.score; }
-    return { big: big, sub: sub, name: m.en, type: TYPE_NAME[r.type] };
+    if (r.mode === 'attack') { var left = Math.max(0, ATTACK_MS - r.active - r.pen); big = (left / 1000).toFixed(1); sub = t('rb.cw', r.score, r.wrong); }
+    else if (r.mode === 'sprint') { big = fmtTime(r.active + r.pen); sub = Math.min(r.items.length + (r.phase === 'answer' ? 1 : 0), SPRINT_N) + ' / ' + SPRINT_N + (r.wrong ? ' · ' + t('rb.w', r.wrong) : ''); }
+    else if (r.mode === 'survival') { big = r.score; sub = t('rb.streak'); }
+    else { big = r.items.length + ' / ' + r.total; sub = t('rb.hit', r.score); }
+    return { big: big, sub: sub, name: m.en, type: typeName(r.type) };
   }
   function drawRunBar() {
     var r = run; if (!r) return;
-    var b = runBar(), box = $('chRun').querySelector('.runbar');
+    var bb = runBar(), box = $('chRun').querySelector('.runbar');
     if (!box) return;
-    box.querySelector('.rb-big').textContent = b.big;
-    box.querySelector('.rb-sub').textContent = b.sub;
+    box.querySelector('.rb-big').textContent = bb.big;
+    box.querySelector('.rb-sub').textContent = bb.sub;
     var dr = $('chRun').querySelector('.drain i');
     if (dr) {
       var left = Math.max(0, ATTACK_MS - r.active - r.pen) / ATTACK_MS;
@@ -1147,17 +1205,17 @@
     }
   }
   function runShell() {
-    var b = runBar();
+    var bb = runBar();
     $('chRun').innerHTML =
-      '<div class="runbar"><button type="button" class="quit">✕ 그만</button>' +
-      '<div class="rb-mid"><div class="rb-mode">' + b.name + '</div><div class="rb-type">' + b.type + '</div></div>' +
-      '<div class="rb-right"><div class="rb-big">' + b.big + '</div><div class="rb-sub">' + b.sub + '</div></div></div>' +
+      '<div class="runbar"><button type="button" class="quit">✕ ' + t('rb.quit') + '</button>' +
+      '<div class="rb-mid"><div class="rb-mode">' + bb.name + '</div><div class="rb-type">' + bb.type + '</div></div>' +
+      '<div class="rb-right"><div class="rb-big">' + bb.big + '</div><div class="rb-sub">' + bb.sub + '</div></div></div>' +
       (run.mode === 'attack' ? '<div class="drain"><i></i></div>' : '') +
-      '<div class="run-q"></div><button type="button" class="primary run-submit" hidden disabled>제출</button>';
+      '<div class="run-q"></div><button type="button" class="primary run-submit" hidden disabled>' + t('btn.submit') + '</button>';
     var quit = $('chRun').querySelector('.quit');
     quit.addEventListener('click', function () {
       if (!run) return;
-      if (!run.quitArm) { run.quitArm = true; quit.textContent = '정말 그만?'; quit.classList.add('arm'); setTimeout(function () { if (run) { run.quitArm = false; quit.textContent = '✕ 그만'; quit.classList.remove('arm'); } }, 2500); return; }
+      if (!run.quitArm) { run.quitArm = true; quit.textContent = t('rb.quit_sure'); quit.classList.add('arm'); setTimeout(function () { if (run) { run.quitArm = false; quit.textContent = '✕ ' + t('rb.quit'); quit.classList.remove('arm'); } }, 2500); return; }
       abortRun();
     });
     drawRunBar();
@@ -1167,7 +1225,7 @@
     r.phase = 'loading';
     runShell();
     var qroot = $('chRun').querySelector('.run-q');
-    skeleton(qroot, '다음 문제 준비 중…');
+    skeleton(qroot, t('rb.preparing'));
     var p = r.nextP;
     if (!p) { finishRun(); return; }
     prefetch();
@@ -1181,7 +1239,7 @@
         onSubmit: function () { answerRun(); }
       });
       if (M[x.t].submit) { sub.hidden = false; sub.disabled = true; sub.addEventListener('click', answerRun); }
-      if (r.type === 'mix') qroot.firstChild.querySelector('.street').insertAdjacentHTML('afterbegin', '<span class="qtype">' + TYPE_NAME[x.t] + '</span>');
+      if (r.type === 'mix') qroot.firstChild.querySelector('.street').insertAdjacentHTML('afterbegin', '<span class="qtype">' + typeName(x.t) + '</span>');
       r.phase = 'answer'; r.t0 = performance.now(); r.last = performance.now();
       drawRunBar();
     });
@@ -1204,21 +1262,40 @@
     }
     var sub = $('chRun').querySelector('.run-submit'); if (sub) sub.disabled = true;
     drawRunBar();
-    var penTxt = !res.ok && r.mode === 'attack' ? ' −5초' : !res.ok && r.mode === 'sprint' ? ' +10초' : '';
-    var over = (r.mode === 'survival' && !res.ok) ||
+    var penTxt = !res.ok && r.mode === 'attack' ? ' −' + t('u.sec', 5) : !res.ok && r.mode === 'sprint' ? ' +' + t('u.sec', 10) : '';
+    var revive = r.mode === 'survival' && !res.ok && !r.revived && r.score >= 3;
+    var over = (r.mode === 'survival' && !res.ok && !revive) ||
       (r.mode === 'attack' && r.active + r.pen >= ATTACK_MS) ||
       (r.mode === 'sprint' && r.items.length >= SPRINT_N) ||
       (r.mode === 'review' && !r.nextP);
     showFb(res.ok, M[x.t].line(x.q, a, res), penTxt, res.ok ? 650 : 1700, function () {
       if (run !== r) return;
-      if (over) finishRun(); else nextQ();
+      if (revive) showRevive(r);
+      else if (over) finishRun(); else nextQ();
+    });
+  }
+  function showRevive(r) {
+    r.phase = 'revive';
+    var box = el('div', 'revive', '<div class="rv-k">SURVIVAL · ' + t('rv.head', '<b>' + r.score + '</b>') + '</div>' +
+      '<p>' + t('rv.p') + '</p>' +
+      '<button type="button" class="primary next go-on">' + adLabel('rv.go') + '</button><button type="button" class="ghost-btn stop">' + t('rv.stop') + '</button><div class="rv-msg"></div>');
+    var qn = $('chRun').querySelector('.run-q'); qn.parentNode.insertBefore(box, qn);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    box.querySelector('.stop').addEventListener('click', function () { if (run === r) finishRun(); });
+    box.querySelector('.go-on').addEventListener('click', function () {
+      var bt = this; bt.disabled = true; bt.textContent = Ads.on ? t('ad.loading') : t('rv.going');
+      Ads.rewarded(function (ok) {
+        if (run !== r) return;
+        if (!ok) { bt.disabled = false; bt.textContent = adLabel('rv.go'); box.querySelector('.rv-msg').textContent = t('rv.fail'); return; }
+        r.revived = true; nextQ();
+      });
     });
   }
   var fbTimer = null, fbDone = null;
   function showFb(ok, line, pen, ms, done) {
     var fb = $('fb');
     fb.className = 'fb ' + (ok ? 'ok' : 'ng');
-    fb.innerHTML = '<b>' + (ok ? '✓ 정답' : '✗ 오답') + (pen ? '<em>' + pen + '</em>' : '') + '</b><span>' + line + '</span><i>탭하여 계속</i>';
+    fb.innerHTML = '<b>' + (ok ? '✓ ' + t('v.ok') : '✗ ' + t('v.ng')) + (pen ? '<em>' + pen + '</em>' : '') + '</b><span>' + line + '</span><i>' + t('fb.tap') + '</i>';
     fb.hidden = false;
     clearTimeout(fbTimer);
     fbDone = function () { fb.hidden = true; clearTimeout(fbTimer); var d = done; fbDone = null; d(); };
@@ -1237,7 +1314,7 @@
     if (r.mode === 'attack' && r.active + r.pen >= ATTACK_MS) { r.phase = 'over'; finishRun(); }
   }, 100);
 
-  function abortRun() { hideFb(); run = null; $('chRun').hidden = true; $('chEnd').hidden = true; $('chHome').hidden = false; renderHome(); window.scrollTo(0, 0); }
+  function abortRun() { hideFb(); run = null; $('chRun').hidden = true; $('chEnd').hidden = true; $('chHome').hidden = false; renderHome(); window.scrollTo(0, 0); updateBanner(); }
 
   function finishRun() {
     var r = run; if (!r) return;
@@ -1254,32 +1331,36 @@
     }
     renderChAcc();
     var n = r.items.length, ok = r.score;
-    var avg = n ? r.items.reduce(function (s, it) { return s + it.ms; }, 0) / n : 0;
-    var bigTxt = r.mode === 'sprint' ? (value === null ? '미완주' : fmtTime(value)) : r.mode === 'review' ? ok + ' / ' + n : String(value);
-    var unit = r.mode === 'survival' ? '연속 정답' : r.mode === 'attack' ? '문제 정답 (60초)' : r.mode === 'sprint' ? (r.pen ? '순수 ' + fmtTime(r.active) + ' + 페널티 ' + (r.pen / 1000) + '초' : '페널티 없음') : '복습 정답 · 남은 오답 ' + notesFor(r.type).length;
-    var html = '<div class="end-hero"><div class="k">' + m.en + ' · ' + TYPE_NAME[r.type] + '</div><div class="v">' + bigTxt + '</div><div class="u">' + unit + '</div>' +
-      (isNew ? '<span class="badge-new">신기록</span>' : prev !== null && value !== null ? '<div class="end-best">최고 기록 ' + m.fmt(prev) + '</div>' : '') + '</div>';
-    html += '<div class="today"><div><div class="k">정답 / 오답</div><div class="v">' + ok + '<small> / ' + (n - ok) + '</small></div></div>' +
-      '<div><div class="k">정확도</div><div class="v">' + (n ? Math.round(ok / n * 100) + '<small>%</small>' : '–') + '</div></div>' +
-      '<div><div class="k">평균 응답</div><div class="v">' + (n ? (avg / 1000).toFixed(1) + '<small>초</small>' : '–') + '</div></div></div>';
+    var avg = n ? r.items.reduce(function (s, it) { return s + it.ms; }, 0) / n : null;
+    var bigTxt = r.mode === 'sprint' ? (value === null ? t('end.dnf') : fmtTime(value)) : r.mode === 'review' ? ok + ' / ' + n : String(value);
+    var unit = r.mode === 'survival' ? t('end.u_survival') : r.mode === 'attack' ? t('end.u_attack') :
+      r.mode === 'sprint' ? (r.pen ? t('end.u_sprint_pen', fmtTime(r.active), r.pen / 1000) : t('end.u_sprint_clean')) : t('end.u_review', notesFor(r.type).length);
+    var html = '<div class="end-hero"><div class="k">' + m.en + ' · ' + typeName(r.type) + '</div><div class="v">' + bigTxt + '</div><div class="u">' + unit + '</div>' +
+      (isNew ? '<span class="badge-new">' + t('end.new') + '</span>' : prev !== null && value !== null ? '<div class="end-best">' + t('end.best', m.fmt(prev)) + '</div>' : '') +
+      (r.revived ? '<div class="end-best">' + t('end.revived') + '</div>' : '') + '</div>';
+    html += '<div class="today"><div><div class="k">' + t('end.cw') + '</div><div class="v">' + ok + '<small> / ' + (n - ok) + '</small></div></div>' +
+      '<div><div class="k">' + t('st.acc') + '</div><div class="v">' + (n ? Math.round(ok / n * 100) + '<small>%</small>' : '–') + '</div></div>' +
+      '<div><div class="k">' + t('ch.avg') + '</div><div class="v">' + (avg !== null ? (avg / 1000).toFixed(1) + '<small>' + t('u.s') + '</small>' : '–') + '</div></div></div>';
     var last = r.items[n - 1];
     if (r.mode === 'survival' && last && !last.res.ok) {
-      html += '<div class="sec-h"><span>여기서 끝난 문제 — ' + TYPE_NAME[last.t] + '</span></div><div class="explain">' + verdictHtml(last.res) + M[last.t].explain(last.q, last.a, last.res) + seeHtml(last.t, last.q) + '</div>';
+      html += '<div class="sec-h"><span>' + t('end.ended_at', typeName(last.t)) + '</span></div><div class="explain">' + verdictHtml(last.res) + M[last.t].explain(last.q, last.a, last.res) + seeHtml(last.t, last.q) + '</div>';
     }
-    html += '<div class="btn-row"><button type="button" class="primary again">다시 하기</button><button type="button" class="ghost-btn home">모드 선택</button></div>';
+    html += '<div class="btn-row"><button type="button" class="primary again">' + t('end.again') + '</button><button type="button" class="ghost-btn home">' + t('end.modes') + '</button></div>';
     if (n) {
-      html += '<div class="sec-h"><span>문제별 리뷰</span><span class="faint">탭하면 해설</span></div><div class="rv">' + r.items.map(function (it, i) {
-        return '<div class="rv-row" data-i="' + i + '"><span class="ix">' + (i + 1) + '</span><span class="ds"><b>' + TYPE_NAME[it.t] + '</b> ' + M[it.t].summary(it.q) + '</span><span class="' + (it.res.ok ? 'ok' : 'ng') + '">' + (it.res.ok ? '✓' : '✗') + ' <small>' + fmtSec(it.ms) + '</small></span></div><div class="rv-detail" hidden></div>';
+      html += '<div class="sec-h"><span>' + t('end.review') + '</span><span class="faint">' + t('end.tap') + '</span></div><div class="rv">' + r.items.map(function (it, i) {
+        return '<div class="rv-row" data-i="' + i + '"><span class="ix">' + (i + 1) + '</span><span class="ds"><b>' + typeName(it.t) + '</b> ' + M[it.t].summary(it.q) + '</span><span class="' + (it.res.ok ? 'ok' : 'ng') + '">' + (it.res.ok ? '✓' : '✗') + ' <small>' + fmtSec(it.ms) + '</small></span></div><div class="rv-detail" hidden></div>';
       }).join('') + '</div>';
     }
     var end = $('chEnd');
     end.innerHTML = html;
     $('chRun').hidden = true; end.hidden = false; window.scrollTo(0, 0);
     end.querySelector('.again').addEventListener('click', function () {
-      if (r.mode === 'review' && !notesFor(r.type).length) { abortRun(); return; }
-      startRun(r.mode, r.type);
+      maybeInterstitial(function () {
+        if (r.mode === 'review' && !notesFor(r.type).length) { abortRun(); return; }
+        startRun(r.mode, r.type);
+      });
     });
-    end.querySelector('.home').addEventListener('click', abortRun);
+    end.querySelector('.home').addEventListener('click', function () { maybeInterstitial(abortRun); });
     end.querySelectorAll('.rv-row').forEach(function (row) {
       row.addEventListener('click', function () {
         var it = r.items[+row.getAttribute('data-i')], det = row.nextSibling;
@@ -1288,120 +1369,130 @@
       });
     });
     run = null;
-    lastEndType = r.type;
+    store.ads.runs++; save();
+    updateBanner();
   }
-  var lastEndType = null;
 
   /* =========================================================
-     GUIDE (용어 · 공식 · 계산기 · 참고표 · 데이터)
+     GUIDE (terms · formulas · calculators · tables · data)
      ========================================================= */
-  var G = window.GUIDE;
-  var TERM = {}; G.terms.forEach(function (t) { TERM[t.id] = t; });
+  var G = window.GUIDE, GT = window.GUIDE_TX[I.lang] || window.GUIDE_TX.en;
+  function gtx(sec, id) { var s = GT[sec] && GT[sec][id]; if (!s && window.GUIDE_TX.en[sec]) s = window.GUIDE_TX.en[sec][id]; return s; }
   var SEE = {
     pot: ['potodds', 'rule24', 'ev', 'dirty'], outs: ['outs', 'rule24', 'dirty', 'backdoor'], pre: ['rfi', 'range', 'steal', 'ipoop'],
     vs: ['3bet', 'coldcall', 'squeeze', 'ipoop'], bb: ['potodds', 'eqr', 'ipoop'], post: ['implied', 'ipoop', 'eqr'], concept: ['ipoop', 'steal', 'squeeze'],
     mu: ['equity', 'domination', 'coinflip']
   };
+  function termTitle(id) { var x = gtx('term', id); return x ? x[0] : id; }
   function seeHtml(type, q) {
     var ids = SEE[type === 'pos' ? q.kind : type] || [];
     if (!ids.length) return '';
-    return '<div class="see"><span>관련 개념</span>' + ids.map(function (id) { return '<button type="button" data-term="' + id + '">' + TERM[id].t.split(' (')[0] + '</button>'; }).join('') + '</div>';
+    return '<div class="see"><span>' + t('g.see') + '</span>' + ids.map(function (id) { return '<button type="button" data-term="' + id + '">' + termTitle(id).split(' (')[0] + '</button>'; }).join('') + '</div>';
   }
   function C2(n, k) { if (k < 0 || k > n) return 0; var r = 1; for (var i = 1; i <= k; i++) r = r * (n - k + i) / i; return r; }
   function pct(x, d) { return (x * 100).toFixed(d === undefined ? 1 : d) + '%'; }
   var guideBuilt = false, guideCalc = { pot: 100, bet: 50, stack: 400, outs: 9, street: 'flop' };
-  var SECS = [['terms', '용어'], ['formulas', '공식'], ['calc', '계산기'], ['equity', '에퀴티 계산'], ['outs', '아웃츠 표'], ['prob', '확률'], ['seats', '포지션'], ['ranges', '레인지 표'], ['mu', '매치업'], ['rules', '앱 기준'], ['data', '데이터']];
+  var SECS = ['lang', 'terms', 'formulas', 'calc', 'equity', 'outs', 'prob', 'seats', 'ranges', 'mu', 'rules', 'data'];
 
   function buildGuide() {
     var g = $('guide');
-    var h = '<div class="g-top"><div class="g-search"><input id="gq" type="search" placeholder="용어·공식 검색 (예: 팟 오즈, MDF, 셋)"><button type="button" id="gqx" hidden>✕</button></div>' +
-      '<div class="g-chips">' + SECS.map(function (s) { return '<button type="button" data-sec="' + s[0] + '">' + s[1] + '</button>'; }).join('') + '</div></div>';
-    h += '<div id="gEmpty" class="g-empty" hidden>검색 결과가 없어요.</div>';
+    var h = '<div class="g-top"><div class="g-search"><input id="gq" type="search" placeholder="' + t('g.search') + '"><button type="button" id="gqx" hidden>✕</button></div>' +
+      '<div class="g-chips">' + SECS.map(function (s) { return '<button type="button" data-sec="' + s + '">' + t('gs.' + s) + '</button>'; }).join('') + '</div></div>';
+    h += '<div id="gEmpty" class="g-empty" hidden>' + t('g.no_result') + '</div>';
+
+    // language
+    h += '<section class="g-sec" id="g-lang"><h2>' + t('gs.lang') + ' <small>Language</small></h2><div class="lang-grid">' + I.LANGS.map(function (L) {
+      return '<button type="button" data-lang="' + L[0] + '" class="' + (L[0] === I.lang ? 'on' : '') + '"><b>' + L[1] + '</b><small>' + L[2] + '</small></button>';
+    }).join('') + '</div><div class="note">' + t('g.lang_note') + '</div></section>';
 
     // terms
-    h += '<section class="g-sec" id="g-terms"><h2>용어 사전 <small>' + G.terms.length + '개</small></h2>';
+    h += '<section class="g-sec" id="g-terms"><h2>' + t('g.terms_h') + ' <small>' + t('g.count', G.terms.length) + '</small></h2>';
     G.cats.forEach(function (c) {
-      h += '<div class="g-cat" data-cat="' + c + '">' + c + '</div>';
-      G.terms.filter(function (t) { return t.c === c; }).forEach(function (t) {
-        h += '<div class="term" id="term-' + t.id + '" data-s="' + (t.t + ' ' + t.en + ' ' + t.d).toLowerCase() + '"><div class="tt"><b>' + t.t + '</b><span>' + t.en + '</span></div><p>' + t.d + '</p>' +
-          (t.ex ? '<div class="tex">예) ' + t.ex + '</div>' : '') + (t.f ? '<button type="button" class="tlink" data-formula="' + t.f + '">공식 보기 →</button>' : '') + '</div>';
+      h += '<div class="g-cat" data-cat="' + c + '">' + t('gc.' + c) + '</div>';
+      G.terms.filter(function (x) { return x.c === c; }).forEach(function (x) {
+        var tx = gtx('term', x.id) || [x.id, ''], sub = I.lang === 'en' ? '' : x.en;
+        h += '<div class="term" id="term-' + x.id + '" data-s="' + (tx[0] + ' ' + x.en + ' ' + tx[1]).toLowerCase().replace(/"/g, '') + '"><div class="tt"><b>' + tx[0] + '</b><span>' + sub + '</span></div><p>' + tx[1] + '</p>' +
+          (tx[2] ? '<div class="tex">' + t('g.ex') + ' ' + tx[2] + '</div>' : '') + (x.f ? '<button type="button" class="tlink" data-formula="' + x.f + '">' + t('g.see_formula') + '</button>' : '') + '</div>';
       });
     });
     h += '</section>';
 
     // formulas
-    h += '<section class="g-sec" id="g-formulas"><h2>공식</h2>' + G.formulas.map(function (f) {
-      return '<div class="fcard" id="f-' + f.id + '" data-s="' + (f.t + ' ' + f.f + ' ' + f.n).toLowerCase() + '"><div class="ft">' + f.t + '</div><div class="ff">' + f.f + '</div><div class="fex">예) ' + f.ex + '</div><p>' + f.n + '</p></div>';
+    h += '<section class="g-sec" id="g-formulas"><h2>' + t('gs.formulas') + '</h2>' + G.formulas.map(function (id) {
+      var f = gtx('formula', id) || [id, '', '', ''];
+      return '<div class="fcard" id="f-' + id + '" data-s="' + (f[0] + ' ' + f[1] + ' ' + f[3]).toLowerCase().replace(/"/g, '') + '"><div class="ft">' + f[0] + '</div><div class="ff">' + f[1] + '</div><div class="fex">' + t('g.ex') + ' ' + f[2] + '</div><p>' + f[3] + '</p></div>';
     }).join('') + '</section>';
 
     // calculators
-    h += '<section class="g-sec" id="g-calc"><h2>팟 오즈 · 아웃츠 계산기</h2>' +
-      '<div class="calc"><div class="cin"><label>팟 (베팅 전)<input type="number" inputmode="decimal" id="cPot"></label><label>상대 베팅<input type="number" inputmode="decimal" id="cBet"></label><label>유효 스택 (콜 후)<input type="number" inputmode="decimal" id="cStack"></label></div><div class="cout" id="cOut1"></div></div>' +
-      '<div class="calc"><div class="cin2"><span class="field-label">아웃츠</span><div class="stepper" id="cOutsSt"><button type="button" data-d="-1">−</button><output id="cOuts"></output><button type="button" data-d="1">+</button></div>' +
-      '<div class="seg" id="cStreet"><button type="button" data-v="flop">플랍 (2장)</button><button type="button" data-v="turn">턴 (1장)</button></div></div><div class="cout" id="cOut2"></div></div></section>';
+    h += '<section class="g-sec" id="g-calc"><h2>' + t('calc.h') + '</h2>' +
+      '<div class="calc"><div class="cin"><label>' + t('m.pot') + '<input type="number" inputmode="decimal" id="cPot"></label><label>' + t('m.bet') + '<input type="number" inputmode="decimal" id="cBet"></label><label>' + t('calc.stack') + '<input type="number" inputmode="decimal" id="cStack"></label></div><div class="cout" id="cOut1"></div></div>' +
+      '<div class="calc"><div class="cin2"><span class="field-label">' + t('calc.outs') + '</span><div class="stepper" id="cOutsSt"><button type="button" data-d="-1">−</button><output id="cOuts"></output><button type="button" data-d="1">+</button></div>' +
+      '<div class="seg" id="cStreet"><button type="button" data-v="flop">' + t('calc.flop2') + '</button><button type="button" data-v="turn">' + t('calc.turn1') + '</button></div></div><div class="cout" id="cOut2"></div></div></section>';
 
     // equity calculator
-    h += '<section class="g-sec" id="g-equity"><h2>에퀴티 계산기 <small>핸드 vs 핸드</small></h2><div class="calc">' +
+    h += '<section class="g-sec" id="g-equity"><h2>' + t('eqc.h') + ' <small>' + t('eqc.sub') + '</small></h2><div class="calc">' +
       '<div class="eslots" id="eSlots"></div><div class="epick" id="ePick"></div>' +
-      '<div class="btn-row"><button type="button" class="primary" id="eRun">계산</button><button type="button" class="ghost-btn" id="eClear">초기화</button></div><div id="eOut"></div>' +
-      '<div class="note">보드 0장: 몬테카를로 100,000회 · 1~2장: 몬테카를로 · 3장 이상: 남은 카드를 전부 계산(정확값)</div></div></section>';
+      '<div class="btn-row"><button type="button" class="primary" id="eRun">' + t('eqc.run') + '</button><button type="button" class="ghost-btn" id="eClear">' + t('eqc.clear') + '</button></div><div id="eOut"></div>' +
+      note(t('eqc.note')) + '</div></section>';
 
     // outs table
-    var rows = [[2, '포켓페어 → 셋'], [3, '오버카드 1장'], [4, '거트샷 · 투페어 → 풀하우스'], [5, '원페어 → 투페어·트리플'], [6, '오버카드 2장'], [7, '셋 → 풀하우스·포카드 (플랍)'], [8, '양방 스트레이트 · 더블 거트샷'], [9, '플러시 드로우'], [10, '거트샷 + 오버카드 2장'], [12, '플러시 + 거트샷'], [15, '플러시 + 양방 · 플러시 + 오버카드 2장']];
-    h += '<section class="g-sec" id="g-outs"><h2>아웃츠 표</h2><div class="otable"><div class="oh">아웃</div><div class="oh">대표 상황</div><div class="oh">턴→리버<br><small>×2 / 정확</small></div><div class="oh">플랍 올인<br><small>×4 / 정확</small></div>' +
+    var rows = [[2, 'ot.2'], [3, 'ot.3'], [4, 'ot.4'], [5, 'ot.5'], [6, 'ot.6'], [7, 'ot.7'], [8, 'ot.8'], [9, 'ot.9'], [10, 'ot.10'], [12, 'ot.12'], [15, 'ot.15']];
+    h += '<section class="g-sec" id="g-outs"><h2>' + t('gs.outs') + '</h2><div class="otable"><div class="oh">' + t('ot.h_outs') + '</div><div class="oh">' + t('ot.h_spot') + '</div><div class="oh">' + t('ot.h_turn') + '<br><small>×2 / ' + t('ot.exact') + '</small></div><div class="oh">' + t('ot.h_flop') + '<br><small>×4 / ' + t('ot.exact') + '</small></div>' +
       rows.map(function (r) {
         var n = r[0], t1 = n / 46, t2 = 1 - (47 - n) / 47 * (46 - n) / 46;
-        return '<div class="on">' + n + '</div><div class="od">' + r[1] + '</div><div class="ov">' + (n * 2) + ' / ' + pct(t1) + '</div><div class="ov">' + (n * 4) + ' / ' + pct(t2) + '</div>';
-      }).join('') + '</div><div class="note">×4 규칙은 아웃츠가 많을수록 실제보다 높게 나옵니다 (15아웃: 60% vs ' + pct(1 - 32 / 47 * 31 / 46) + ').</div></section>';
+        return '<div class="on">' + n + '</div><div class="od">' + t(r[1]) + '</div><div class="ov">' + (n * 2) + ' / ' + pct(t1) + '</div><div class="ov">' + (n * 4) + ' / ' + pct(t2) + '</div>';
+      }).join('') + '</div>' + note(t('ot.note', pct(1 - 32 / 47 * 31 / 46))) + '</section>';
 
     // probabilities
     var maxP = 43.8;
-    h += '<section class="g-sec" id="g-prob"><h2>족보 · 확률</h2><div class="g-sub">족보 순위와 7장(홀카드 2 + 보드 5)으로 최종 완성될 확률</div><div class="hrank">' +
-      G.hands.map(function (x, i) {
-        var p = G.hand7[i];
-        return '<div class="hr"><span class="hi">' + (i + 1) + '</span><div><b>' + x[0] + '</b><span class="hx">' + x[1] + '</span><small>' + x[2] + '</small></div><div class="hp"><span class="hb"><i style="width:' + Math.max(1.5, p / maxP * 100) + '%"></i></span>' + (p < 1 ? p.toFixed(p < 0.1 ? 3 : 2) : p.toFixed(1)) + '%</div></div>';
+    h += '<section class="g-sec" id="g-prob"><h2>' + t('gs.prob_h') + '</h2><div class="g-sub">' + t('pr.sub') + '</div><div class="hrank">' +
+      G.hand7.map(function (p, i) {
+        var hx = GT.hands ? GT.hands[i] : window.GUIDE_TX.en.hands[i];
+        return '<div class="hr"><span class="hi">' + (i + 1) + '</span><div><b>' + hx[0] + '</b><span class="hx">' + G.handEx[i] + '</span><small>' + hx[1] + '</small></div><div class="hp"><span class="hb"><i style="width:' + Math.max(1.5, p / maxP * 100) + '%"></i></span>' + (p < 1 ? p.toFixed(p < 0.1 ? 3 : 2) : p.toFixed(1)) + '%</div></div>';
       }).join('') + '</div>';
     var pr = [
-      ['포켓페어를 받을 확률', '78 ÷ 1326', 78 / 1326], ['특정 페어 (예: AA)', '6 ÷ 1326', 6 / 1326], ['수딧 핸드를 받을 확률', '312 ÷ 1326', 312 / 1326], ['AK (수딧+오프)', '16 ÷ 1326', 16 / 1326],
-      ['포켓페어 → 플랍에서 셋 이상', '1 − C(48,3) ÷ C(50,3)', 1 - C2(48, 3) / C2(50, 3)],
-      ['페어 아닌 핸드 → 플랍에서 홀카드가 페어 이상', '1 − C(44,3) ÷ C(50,3)', 1 - C2(44, 3) / C2(50, 3)],
-      ['수딧 → 플랍에서 플러시 완성', 'C(11,3) ÷ C(50,3)', C2(11, 3) / C2(50, 3)],
-      ['수딧 → 플랍에서 플러시 드로우', 'C(11,2) × 39 ÷ C(50,3)', C2(11, 2) * 39 / C2(50, 3)],
-      ['플랍 플러시 드로우 → 리버까지 완성', '1 − 38/47 × 37/46', 1 - 38 / 47 * 37 / 46],
-      ['턴 플러시 드로우 → 리버 완성', '9 ÷ 46', 9 / 46]
+      ['pr.pp', '78 ÷ 1326', 78 / 1326], ['pr.aa', '6 ÷ 1326', 6 / 1326], ['pr.suited', '312 ÷ 1326', 312 / 1326], ['pr.ak', '16 ÷ 1326', 16 / 1326],
+      ['pr.set', '1 − C(48,3) ÷ C(50,3)', 1 - C2(48, 3) / C2(50, 3)],
+      ['pr.pairup', '1 − C(44,3) ÷ C(50,3)', 1 - C2(44, 3) / C2(50, 3)],
+      ['pr.flush', 'C(11,3) ÷ C(50,3)', C2(11, 3) / C2(50, 3)],
+      ['pr.fd', 'C(11,2) × 39 ÷ C(50,3)', C2(11, 2) * 39 / C2(50, 3)],
+      ['pr.fd_river', '1 − 38/47 × 37/46', 1 - 38 / 47 * 37 / 46],
+      ['pr.fd_turn', '9 ÷ 46', 9 / 46]
     ];
-    h += '<div class="g-sub">자주 쓰는 확률 (앱이 직접 계산)</div><div class="ptable">' + pr.map(function (r) { return '<div class="pl">' + r[0] + '<small>' + r[1] + '</small></div><div class="pv2">' + pct(r[2], r[2] < 0.01 ? 2 : 1) + '</div>'; }).join('') + '</div></section>';
+    h += '<div class="g-sub">' + t('pr.common') + '</div><div class="ptable">' + pr.map(function (r) { return '<div class="pl">' + t(r[0]) + '<small>' + r[1] + '</small></div><div class="pv2">' + pct(r[2], r[2] < 0.01 ? 2 : 1) + '</div>'; }).join('') + '</div></section>';
 
     // seats
     var RFIp = {}; E.POSITIONS.forEach(function (p) { RFIp[p] = E.rangePct(p); });
-    h += '<section class="g-sec" id="g-seats"><h2>포지션</h2><div class="seat-table">' + G.seats.map(function (s) {
-      return '<div class="st-row"><b>' + s[0] + '</b><div><span>' + s[1] + ' <em>' + s[2] + '</em></span><small>' + s[3] + '</small></div><span class="st-p">' + (RFIp[s[0]] !== undefined ? 'RFI ' + f1(RFIp[s[0]]) + '%' : '') + '</span></div>';
+    h += '<section class="g-sec" id="g-seats"><h2>' + t('gs.seats') + '</h2><div class="seat-table">' + SEATS.map(function (s) {
+      var sx = gtx('seat', s) || ['', ''];
+      return '<div class="st-row"><b>' + s + '</b><div><span>' + sx[0] + ' <em>' + G.seatEn[s] + '</em></span><small>' + sx[1] + '</small></div><span class="st-p">' + (RFIp[s] !== undefined ? 'RFI ' + f1(RFIp[s]) + '%' : '') + '</span></div>';
     }).join('') + '</div>' +
-      '<div class="g-sub">액션 순서</div><div class="ord-row"><span class="ol">프리플랍</span>' + SEATS.map(function (s) { return '<span>' + s + '</span>'; }).join('<i>→</i>') + '</div>' +
-      '<div class="ord-row"><span class="ol">플랍 이후</span>' + POST_ORDER.map(function (s) { return '<span>' + s + '</span>'; }).join('<i>→</i>') + '</div>' +
-      '<div class="note">프리플랍은 블라인드가 마지막, 플랍부터는 블라인드가 먼저. 그래서 BTN은 포스트플랍에서 항상 IP, 블라인드는 대부분 OOP입니다. RFI % = 앱 기준 오픈 비율.</div></section>';
+      '<div class="g-sub">' + t('se.order') + '</div><div class="ord-row"><span class="ol">' + t('se.pre') + '</span>' + SEATS.map(function (s) { return '<span>' + s + '</span>'; }).join('<i>→</i>') + '</div>' +
+      '<div class="ord-row"><span class="ol">' + t('se.post') + '</span>' + POST_ORDER.map(function (s) { return '<span>' + s + '</span>'; }).join('<i>→</i>') + '</div>' +
+      note(t('se.note')) + '</section>';
 
     // ranges
-    h += '<section class="g-sec" id="g-ranges"><h2>레인지 표 <small>앱 기준</small></h2><div class="seg" id="rMode"><button type="button" data-v="rfi">오픈 (RFI)</button><button type="button" data-v="vs">레이즈 대응</button></div>' +
+    h += '<section class="g-sec" id="g-ranges"><h2>' + t('rg.h') + ' <small>' + t('rg.app') + '</small></h2><div class="seg" id="rMode"><button type="button" data-v="rfi">' + t('rg.rfi') + '</button><button type="button" data-v="vs">' + t('pk.vs') + '</button></div>' +
       '<div class="type-chips sub" id="rKeys"></div><div id="rGrid"></div></section>';
 
     // matchups
-    h += '<section class="g-sec" id="g-mu"><h2>대표 매치업 <small>정확값 (전체 보드 계산)</small></h2>' + G.matchups.map(function (m) {
+    h += '<section class="g-sec" id="g-mu"><h2>' + t('gm.h') + ' <small>' + t('gm.sub') + '</small></h2>' + G.matchups.map(function (m) {
       var A = m.a.split(' ').map(E.cardFromCode), B = m.b.split(' ').map(E.cardFromCode), ea = m.eq - m.tie / 2, eb = 100 - m.eq - m.tie / 2;
-      return '<div class="mrow"><div class="mh"><b>' + m.k + '</b><span>' + m.d + '</span></div><div class="mc2">' + A.map(function (c) { return mc(c); }).join('') + '<em>vs</em>' + B.map(function (c) { return mc(c); }).join('') + '</div>' +
+      return '<div class="mrow"><div class="mh"><b>' + m.k + '</b><span>' + t('ck.' + m.d) + '</span></div><div class="mc2">' + A.map(function (c) { return mc(c); }).join('') + '<em>vs</em>' + B.map(function (c) { return mc(c); }).join('') + '</div>' +
         '<div class="stack sm"><div class="a" style="width:' + ea + '%"></div><div class="t" style="width:' + m.tie + '%"></div><div class="b" style="width:' + eb + '%"></div></div>' +
-        '<div class="stack-legend"><span class="a">' + m.eq.toFixed(1) + '%</span><span class="muted">무 ' + m.tie.toFixed(1) + '%</span><span class="b">' + (100 - m.eq).toFixed(1) + '%</span></div></div>';
-    }).join('') + '<div class="note">무늬에 따라 ±1%p 정도 달라집니다. 에퀴티 = 승 + 무승부 ÷ 2.</div></section>';
+        '<div class="stack-legend"><span class="a">' + m.eq.toFixed(1) + '%</span><span class="muted">' + t('mu.tie', m.tie.toFixed(1)) + '</span><span class="b">' + (100 - m.eq).toFixed(1) + '%</span></div></div>';
+    }).join('') + note(t('gm.note')) + '</section>';
 
     // rules
-    h += '<section class="g-sec" id="g-rules"><h2>이 앱의 채점 기준</h2>' + G.rules.map(function (r) { return '<div class="rule"><b>' + r[0] + '</b><p>' + r[1] + '</p></div>'; }).join('') + '</section>';
+    h += '<section class="g-sec" id="g-rules"><h2>' + t('gr.h') + '</h2>' + G.rules.map(function (id) { var r = gtx('rule', id) || [id, '']; return '<div class="rule"><b>' + r[0] + '</b><p>' + r[1] + '</p></div>'; }).join('') + '</section>';
 
     // data
-    h += '<section class="g-sec" id="g-data"><h2>설정 · 데이터</h2>' +
-      '<div class="rule"><b>하루 목표 문제 수</b><div class="chips" id="goalChips">' + [20, 30, 50, 100].map(function (n) { return '<button type="button" data-g="' + n + '">' + n + '</button>'; }).join('') + '</div></div>' +
-      '<div class="rule"><b>백업</b><p>앱을 지우면 기록도 사라져요. 아래 코드를 복사해 메모장 등에 보관하면 나중에 복원할 수 있어요.</p><textarea id="bkOut" readonly rows="3"></textarea><div class="btn-row"><button type="button" class="ghost-btn" id="bkMake">백업 코드 만들기</button><button type="button" class="ghost-btn" id="bkCopy">복사</button></div></div>' +
-      '<div class="rule"><b>복원</b><p>백업 코드를 붙여넣고 복원을 누르세요. 지금 기록은 덮어써집니다.</p><textarea id="bkIn" rows="3" placeholder="백업 코드 붙여넣기"></textarea><div class="btn-row"><button type="button" class="ghost-btn" id="bkLoad">복원</button><span id="bkMsg" class="bk-msg"></span></div></div>' +
-      '<div class="rule"><b>전체 초기화</b><p>모든 탭 기록, 챌린지 기록, 오답 노트, 분석 로그를 지웁니다.</p><span id="wipeWrap"></span></div>' +
+    h += '<section class="g-sec" id="g-data"><h2>' + t('gd.h') + '</h2>' +
+      '<div class="rule"><b>' + t('gd.goal') + '</b><div class="chips" id="goalChips">' + [20, 30, 50, 100].map(function (n) { return '<button type="button" data-g="' + n + '">' + n + '</button>'; }).join('') + '</div></div>' +
+      '<div class="rule"><b>' + t('gd.backup') + '</b><p>' + t('gd.backup_p') + '</p><textarea id="bkOut" readonly rows="3"></textarea><div class="btn-row"><button type="button" class="ghost-btn" id="bkMake">' + t('gd.make') + '</button><button type="button" class="ghost-btn" id="bkCopy">' + t('gd.copy') + '</button></div></div>' +
+      '<div class="rule"><b>' + t('gd.restore') + '</b><p>' + t('gd.restore_p') + '</p><textarea id="bkIn" rows="3" placeholder="' + t('gd.paste') + '"></textarea><div class="btn-row"><button type="button" class="ghost-btn" id="bkLoad">' + t('gd.restore') + '</button><span id="bkMsg" class="bk-msg"></span></div></div>' +
+      '<div class="rule"><b>' + t('gd.ads') + '</b><p>' + t(Ads.on ? 'gd.ads_on' : 'gd.ads_off') + ' <a class="tlink" href="privacy.html">' + t('gd.privacy') + '</a></p></div>' +
+      '<div class="rule"><b>' + t('gd.wipe') + '</b><p>' + t('gd.wipe_p') + '</p><span id="wipeWrap"></span></div>' +
       '<div class="ver">Holdem Lab v' + APP_VER + '</div></section>';
     g.innerHTML = h;
     wireGuide();
@@ -1410,13 +1501,12 @@
 
   function wireGuide() {
     var g = $('guide');
-    // search
     var q = $('gq'), qx = $('gqx');
     function filter() {
       var s = q.value.trim().toLowerCase(); qx.hidden = !s;
       g.classList.toggle('searching', !!s);
       var any = false;
-      g.querySelectorAll('.term, .fcard').forEach(function (el) { var hit = !s || el.getAttribute('data-s').indexOf(s) >= 0; el.hidden = !hit; if (hit && s) any = true; });
+      g.querySelectorAll('.term, .fcard').forEach(function (x) { var hit = !s || x.getAttribute('data-s').indexOf(s) >= 0; x.hidden = !hit; if (hit && s) any = true; });
       g.querySelectorAll('.g-cat').forEach(function (c) {
         var vis = false, n = c.nextElementSibling;
         while (n && n.classList.contains('term')) { if (!n.hidden) vis = true; n = n.nextElementSibling; }
@@ -1426,52 +1516,48 @@
     }
     q.addEventListener('input', filter);
     qx.addEventListener('click', function () { q.value = ''; filter(); });
-    g.querySelectorAll('.g-chips button').forEach(function (b) {
-      b.addEventListener('click', function () { q.value = ''; filter(); scrollToEl($('g-' + b.getAttribute('data-sec'))); });
+    g.querySelectorAll('.g-chips button').forEach(function (bt) {
+      bt.addEventListener('click', function () { q.value = ''; filter(); scrollToEl($('g-' + bt.getAttribute('data-sec'))); });
     });
     g.addEventListener('click', function (e) {
-      var f = e.target.closest('[data-formula]'); if (f) { q.value = ''; filter(); flash($('f-' + f.getAttribute('data-formula'))); }
+      var f = e.target.closest('[data-formula]'); if (f) { q.value = ''; filter(); flash($('f-' + f.getAttribute('data-formula'))); return; }
+      var lg = e.target.closest('[data-lang]'); if (lg && lg.getAttribute('data-lang') !== I.lang) { I.setLang(lg.getAttribute('data-lang')); store.settings.tab = 'pot'; save(); location.reload(); }
     });
-    // pot odds calc
     $('cPot').value = guideCalc.pot; $('cBet').value = guideCalc.bet; $('cStack').value = guideCalc.stack;
     ['cPot', 'cBet', 'cStack'].forEach(function (id) { $(id).addEventListener('input', calc); });
-    $('cOutsSt').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; guideCalc.outs = Math.max(0, Math.min(25, guideCalc.outs + +b.getAttribute('data-d'))); calc(); });
-    $('cStreet').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; guideCalc.street = b.getAttribute('data-v'); calc(); });
+    $('cOutsSt').addEventListener('click', function (e) { var bt = e.target.closest('button'); if (!bt) return; guideCalc.outs = Math.max(0, Math.min(25, guideCalc.outs + +bt.getAttribute('data-d'))); calc(); });
+    $('cStreet').addEventListener('click', function (e) { var bt = e.target.closest('button'); if (!bt) return; guideCalc.street = bt.getAttribute('data-v'); calc(); });
     calc();
-    // equity calc
     eqInit();
-    // ranges
     var rMode = 'rfi', rKey = 'UTG';
     function drawRange() {
-      $('rMode').querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-v') === rMode); });
+      $('rMode').querySelectorAll('button').forEach(function (bt) { bt.classList.toggle('on', bt.getAttribute('data-v') === rMode); });
       var keys = rMode === 'rfi' ? E.POSITIONS : Object.keys(E.VS_OPEN);
       if (keys.indexOf(rKey) < 0) rKey = keys[0];
       $('rKeys').innerHTML = keys.map(function (k) {
-        var lab = rMode === 'rfi' ? k : k.split('>')[0] + ' 오픈 · ' + (k.split('>')[1] === 'IP' ? 'IP' : k.split('>')[1]);
+        var lab = rMode === 'rfi' ? k : t('rg.vs_key', k.split('>')[0], k.split('>')[1]);
         return '<button type="button" data-k="' + k + '" class="' + (k === rKey ? 'on' : '') + '">' + lab + '</button>';
       }).join('');
       if (rMode === 'rfi') {
-        $('rGrid').innerHTML = '<div class="legend3"><span class="c">오픈 ' + f1(E.rangePct(rKey)) + '%</span><span class="f">폴드</span></div>' + rangeGrid(rKey, null) + '<div class="note">' + E.RANGE_TEXT[rKey] + '</div>';
+        $('rGrid').innerHTML = '<div class="legend3"><span class="c">' + act('open') + ' ' + f1(E.rangePct(rKey)) + '%</span><span class="f">' + act('fold') + '</span></div>' + rangeGrid(rKey, null) + note(E.RANGE_TEXT[rKey]);
       } else {
         var T = E.VS_OPEN[rKey], TX = E.VS_OPEN_TEXT[rKey], rp = E.setPct(T.r), cp = E.setPct(T.c);
-        $('rGrid').innerHTML = '<div class="legend3"><span class="r">3벳 ' + f1(rp) + '%</span><span class="c">콜 ' + f1(cp) + '%</span><span class="f">폴드 ' + f1(100 - rp - cp) + '%</span></div>' + grid3(T, null) +
-          '<div class="note">3벳: ' + TX.r + (TX.c ? '<br>콜: ' + TX.c : '<br>콜 없음 (3벳 or 폴드)') + '</div>';
+        $('rGrid').innerHTML = legend3(rp, cp) + grid3(T, null) + note(act('3bet') + ': ' + TX.r + (TX.c ? '<br>' + act('call') + ': ' + TX.c : '<br>' + t('rg.no_call')));
       }
     }
-    $('rMode').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; rMode = b.getAttribute('data-v'); drawRange(); });
-    $('rKeys').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; rKey = b.getAttribute('data-k'); drawRange(); });
+    $('rMode').addEventListener('click', function (e) { var bt = e.target.closest('button'); if (!bt) return; rMode = bt.getAttribute('data-v'); drawRange(); });
+    $('rKeys').addEventListener('click', function (e) { var bt = e.target.closest('button'); if (!bt) return; rKey = bt.getAttribute('data-k'); drawRange(); });
     drawRange();
-    // data
-    function drawGoal() { $('goalChips').querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', +b.getAttribute('data-g') === store.settings.goal); }); }
-    $('goalChips').addEventListener('click', function (e) { var b = e.target.closest('button'); if (!b) return; store.settings.goal = +b.getAttribute('data-g'); save(); drawGoal(); renderGoal(); });
+    function drawGoal() { $('goalChips').querySelectorAll('button').forEach(function (bt) { bt.classList.toggle('on', +bt.getAttribute('data-g') === store.settings.goal); }); }
+    $('goalChips').addEventListener('click', function (e) { var bt = e.target.closest('button'); if (!bt) return; store.settings.goal = +bt.getAttribute('data-g'); save(); drawGoal(); renderGoal(); });
     drawGoal();
     $('bkMake').addEventListener('click', function () { $('bkOut').value = JSON.stringify(store); });
     $('bkCopy').addEventListener('click', function () {
       if (!$('bkOut').value) $('bkOut').value = JSON.stringify(store);
       $('bkOut').select();
       var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-      $('bkCopy').textContent = ok ? '복사됨' : '길게 눌러 복사';
-      setTimeout(function () { $('bkCopy').textContent = '복사'; }, 1600);
+      $('bkCopy').textContent = ok ? t('gd.copied') : t('gd.copy_manual');
+      setTimeout(function () { $('bkCopy').textContent = t('gd.copy'); }, 1600);
     });
     $('bkLoad').addEventListener('click', function () {
       var msg = $('bkMsg');
@@ -1479,10 +1565,10 @@
         var d = JSON.parse($('bkIn').value);
         if (!d || typeof d !== 'object' || !d.stats) throw new Error('bad');
         localStorage.setItem(KEY, JSON.stringify(d));
-        msg.textContent = '복원 완료 — 다시 불러오는 중…'; setTimeout(function () { location.reload(); }, 600);
-      } catch (e) { msg.textContent = '코드를 읽을 수 없어요. 전체를 붙여넣었는지 확인해 주세요.'; }
+        msg.textContent = t('gd.restored'); setTimeout(function () { location.reload(); }, 600);
+      } catch (e) { msg.textContent = t('gd.restore_err'); }
     });
-    confirmButton($('wipeWrap'), '전체 기록 지우기', function () { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } location.reload(); });
+    confirmButton($('wipeWrap'), t('gd.wipe_btn'), function () { try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ } location.reload(); });
   }
 
   function calc() {
@@ -1490,48 +1576,48 @@
     guideCalc.pot = P; guideCalc.bet = B; guideCalc.stack = S;
     var need = P + 2 * B > 0 ? B / (P + 2 * B) : 0;
     var cells = [
-      ['필요 승률 (팟 오즈)', pct(need), B + ' ÷ (' + P + ' + ' + B + ' + ' + B + ')'],
-      ['오즈 비율', B > 0 ? ((P + B) / B).toFixed(2) + ' : 1' : '–', '(팟 + 베팅) : 콜'],
-      ['MDF', P + B > 0 ? pct(P / (P + B)) : '–', '팟 ÷ (팟 + 베팅)'],
-      ['블러프 손익분기 폴드율', P + B > 0 ? pct(B / (P + B)) : '–', '베팅 ÷ (팟 + 베팅)'],
-      ['리버 블러프 비중', pct(need), '베팅 ÷ (팟 + 2 × 베팅)'],
-      ['콜 후 SPR', S > 0 && P + 2 * B > 0 ? (S / (P + 2 * B)).toFixed(1) : '–', '스택 ÷ (팟 + 2 × 베팅)']
+      [t('calc.need'), pct(need), B + ' ÷ (' + P + ' + ' + B + ' + ' + B + ')'],
+      [t('calc.ratio'), B > 0 ? ((P + B) / B).toFixed(2) + ' : 1' : '–', t('calc.ratio_f')],
+      ['MDF', P + B > 0 ? pct(P / (P + B)) : '–', t('calc.mdf_f')],
+      [t('calc.bluff'), P + B > 0 ? pct(B / (P + B)) : '–', t('calc.bluff_f')],
+      [t('calc.ratio_river'), pct(need), t('calc.ratio_river_f')],
+      [t('calc.spr'), S > 0 && P + 2 * B > 0 ? (S / (P + 2 * B)).toFixed(1) : '–', t('calc.spr_f')]
     ];
     $('cOut1').innerHTML = cells.map(function (c) { return '<div><span>' + c[0] + '</span><b>' + c[1] + '</b><small>' + c[2] + '</small></div>'; }).join('');
     var n = guideCalc.outs, flop = guideCalc.street === 'flop';
     $('cOuts').textContent = n;
-    $('cStreet').querySelectorAll('button').forEach(function (b) { b.classList.toggle('on', b.getAttribute('data-v') === guideCalc.street); });
+    $('cStreet').querySelectorAll('button').forEach(function (bt) { bt.classList.toggle('on', bt.getAttribute('data-v') === guideCalc.street); });
     var rule = n * (flop ? 4 : 2), exact = flop ? 1 - (47 - n) / 47 * (46 - n) / 46 : n / 46;
     var corr = flop && n > 8 ? rule - (n - 8) : null;
-    var verdict = exact > need ? '콜 이득' : '폴드';
+    var verdict = exact > need ? t('calc.call_good') : act('fold');
     var ev = exact * (P + B) - (1 - exact) * B;
     var xneed = exact > 0 ? B * (1 - exact) / exact - (P + B) : Infinity;
     $('cOut2').innerHTML =
-      '<div><span>규칙값 (×' + (flop ? 4 : 2) + ')</span><b>' + rule + '%</b><small>' + (corr !== null ? '보정 ' + corr + '%' : '&nbsp;') + '</small></div>' +
-      '<div><span>정확한 확률</span><b>' + pct(exact) + '</b><small>' + (flop ? '1 − (' + (47 - n) + '/47 × ' + (46 - n) + '/46)' : n + ' ÷ 46') + '</small></div>' +
-      '<div class="wide ' + (exact > need ? 'y' : 'n') + '"><span>위 팟 오즈와 비교 (정확값 기준)</span><b>' + pct(exact) + ' ' + (exact > need ? '&gt;' : '&lt;') + ' ' + pct(need) + ' → ' + verdict + '</b><small>콜 EV ' + (ev >= 0 ? '+' : '') + f1(ev) + (exact <= need && isFinite(xneed) ? ' · 임플라이드로 ' + Math.round(xneed) + ' 이상 더 받아내야 본전' : '') + '</small></div>';
+      '<div><span>' + t('calc.rule', flop ? 4 : 2) + '</span><b>' + rule + '%</b><small>' + (corr !== null ? t('calc.corr', corr) : '&nbsp;') + '</small></div>' +
+      '<div><span>' + t('calc.exact') + '</span><b>' + pct(exact) + '</b><small>' + (flop ? '1 − (' + (47 - n) + '/47 × ' + (46 - n) + '/46)' : n + ' ÷ 46') + '</small></div>' +
+      '<div class="wide ' + (exact > need ? 'y' : 'n') + '"><span>' + t('calc.cmp') + '</span><b>' + pct(exact) + ' ' + (exact > need ? '&gt;' : '&lt;') + ' ' + pct(need) + ' → ' + verdict + '</b><small>' + t('calc.ev', sgn(ev)) + (exact <= need && isFinite(xneed) ? ' · ' + t('calc.implied', Math.round(xneed)) : '') + '</small></div>';
   }
 
   /* equity calculator with card picker */
   var eq = { slots: [null, null, null, null, null, null, null, null, null], active: 0 };
-  var SLOT_LAB = ['A', 'A', 'B', 'B', '플랍', '플랍', '플랍', '턴', '리버'];
+  function slotLab(i) { return i < 2 ? 'A' : i < 4 ? 'B' : i < 7 ? 'Flop' : i === 7 ? 'Turn' : 'River'; }
   function eqInit() {
-    var pick = $('ePick'), html = '';
+    var pk = $('ePick'), html = '';
     for (var s = 0; s < 4; s++) {
       html += '<div class="prow">';
       for (var r = 12; r >= 0; r--) { var c = r * 4 + s; html += '<button type="button" data-c="' + c + '" class="' + (s === 1 || s === 2 ? 'red' : '') + '">' + (E.RANKS[r] === 'T' ? '10' : E.RANKS[r]) + '<small>' + E.SUIT_SYM[s] + '</small></button>'; }
       html += '</div>';
     }
-    pick.innerHTML = html;
-    pick.addEventListener('click', function (e) {
-      var b = e.target.closest('button'); if (!b || b.disabled) return;
-      eq.slots[eq.active] = +b.getAttribute('data-c');
+    pk.innerHTML = html;
+    pk.addEventListener('click', function (e) {
+      var bt = e.target.closest('button'); if (!bt || bt.disabled) return;
+      eq.slots[eq.active] = +bt.getAttribute('data-c');
       var nx = eq.slots.indexOf(null); eq.active = nx < 0 ? eq.active : nx;
       eqDraw();
     });
     $('eSlots').addEventListener('click', function (e) {
-      var b = e.target.closest('[data-i]'); if (!b) return;
-      var i = +b.getAttribute('data-i');
+      var bt = e.target.closest('[data-i]'); if (!bt) return;
+      var i = +bt.getAttribute('data-i');
       if (eq.slots[i] !== null && eq.active === i) eq.slots[i] = null;
       eq.active = i; eqDraw();
     });
@@ -1541,47 +1627,44 @@
   }
   function eqDraw() {
     var used = {}; eq.slots.forEach(function (c) { if (c !== null) used[c] = 1; });
-    var grp = [[0, 1, 'HAND A'], [2, 3, 'HAND B'], [4, 8, 'BOARD (선택)']];
-    $('eSlots').innerHTML = grp.map(function (g) {
-      var h = '<div class="eg"><span class="row-label">' + g[2] + '</span><div class="es">';
-      for (var i = g[0]; i <= g[1]; i++) {
+    var grp = [[0, 1, 'HAND A'], [2, 3, 'HAND B'], [4, 8, t('eqc.board')]];
+    $('eSlots').innerHTML = grp.map(function (gg) {
+      var h = '<div class="eg"><span class="row-label">' + gg[2] + '</span><div class="es">';
+      for (var i = gg[0]; i <= gg[1]; i++) {
         var c = eq.slots[i];
-        h += '<button type="button" data-i="' + i + '" class="slotb' + (i === eq.active ? ' act' : '') + (c !== null && isRed(c) ? ' red' : '') + (c !== null ? ' fill' : '') + '">' + (c !== null ? rankTxt(c) + E.SUIT_SYM[E.suitOf(c)] : '<small>' + SLOT_LAB[i] + '</small>') + '</button>';
+        h += '<button type="button" data-i="' + i + '" class="slotb' + (i === eq.active ? ' act' : '') + (c !== null && isRed(c) ? ' red' : '') + (c !== null ? ' fill' : '') + '">' + (c !== null ? rankTxt(c) + E.SUIT_SYM[E.suitOf(c)] : '<small>' + slotLab(i) + '</small>') + '</button>';
       }
       return h + '</div></div>';
     }).join('');
-    $('ePick').querySelectorAll('button').forEach(function (b) { b.disabled = !!used[+b.getAttribute('data-c')]; });
-    var s = eq.slots, okHands = s[0] !== null && s[1] !== null && s[2] !== null && s[3] !== null;
-    $('eRun').disabled = !okHands;
+    $('ePick').querySelectorAll('button').forEach(function (bt) { bt.disabled = !!used[+bt.getAttribute('data-c')]; });
+    var s = eq.slots;
+    $('eRun').disabled = !(s[0] !== null && s[1] !== null && s[2] !== null && s[3] !== null);
   }
   function eqRun() {
     var s = eq.slots, A = [s[0], s[1]], B = [s[2], s[3]];
     var board = s.slice(4).filter(function (c) { return c !== null; });
     var out = $('eOut');
-    out.innerHTML = '<div class="loading">계산 중…</div>';
+    out.innerHTML = '<div class="loading">' + t('eqc.calculating') + '</div>';
     $('eRun').disabled = true;
     E.equityBoard(A, B, board, 100000, function (r) {
       $('eRun').disabled = false;
-      var w = r.win * 100, t = r.tie * 100, l = r.lose * 100, ea = r.eqA * 100;
-      var ka = board.length ? E.CAT_KO[E.category(E.evaluate(A.concat(board)))] : E.handKeyOf(A[0], A[1]);
-      var kb = board.length ? E.CAT_KO[E.category(E.evaluate(B.concat(board)))] : E.handKeyOf(B[0], B[1]);
-      out.innerHTML = '<div class="big-eq"><div><div class="k">A · ' + ka + '</div><div class="v a">' + f1(ea) + '%</div></div><div style="text-align:right"><div class="k">B · ' + kb + '</div><div class="v b">' + f1(100 - ea) + '%</div></div></div>' +
-        '<div class="stack"><div class="a" style="width:' + w + '%">' + (w > 12 ? 'A ' + f1(w) : '') + '</div><div class="t" style="width:' + t + '%">' + (t > 11 ? '무 ' + f1(t) : '') + '</div><div class="b" style="width:' + l + '%">' + (l > 12 ? 'B ' + f1(l) : '') + '</div></div>' +
-        '<div class="stack-legend"><span class="a">A 승 ' + f1(w) + '%</span><span class="muted">무 ' + f1(t) + '%</span><span class="b">B 승 ' + f1(l) + '%</span></div>' +
-        '<div class="note">' + (r.exact ? '남은 보드 ' + r.n.toLocaleString() + '가지를 전부 계산한 정확값' : '몬테카를로 ' + r.n.toLocaleString() + '회 · 표준오차 ±' + (r.se * 100).toFixed(2) + '%p') + '</div>';
+      var ka = board.length ? catName(E.category(E.evaluate(A.concat(board)))) : E.handKeyOf(A[0], A[1]);
+      var kb = board.length ? catName(E.category(E.evaluate(B.concat(board)))) : E.handKeyOf(B[0], B[1]);
+      out.innerHTML = eqBlock(ka, kb, r.win * 100, r.tie * 100, r.lose * 100, r.eqA * 100) +
+        note(r.exact ? t('eqc.exact', r.n.toLocaleString()) : t('eqc.mc', r.n.toLocaleString(), (r.se * 100).toFixed(2)));
     });
   }
 
-  function scrollToEl(el) { if (!el) return; var y = el.getBoundingClientRect().top + window.pageYOffset - 118; window.scrollTo({ top: y, behavior: 'smooth' }); }
-  function flash(el) { if (!el) return; scrollToEl(el); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+  function scrollToEl(x) { if (!x) return; var y = x.getBoundingClientRect().top + window.pageYOffset - 118; window.scrollTo({ top: y, behavior: 'smooth' }); }
+  function flash(x) { if (!x) return; scrollToEl(x); x.classList.remove('flash'); void x.offsetWidth; x.classList.add('flash'); }
   function openTerm(id) {
     go('guide');
     var q = $('gq'); if (q && q.value) { q.value = ''; q.dispatchEvent(new Event('input')); }
     setTimeout(function () { flash($('term-' + id)); }, 80);
   }
   document.addEventListener('click', function (e) {
-    var b = e.target.closest('[data-term]'); if (!b) return;
-    e.stopPropagation(); openTerm(b.getAttribute('data-term'));
+    var bt = e.target.closest('[data-term]'); if (!bt) return;
+    e.stopPropagation(); openTerm(bt.getAttribute('data-term'));
   });
 
   /* daily goal + streak */
@@ -1593,42 +1676,311 @@
     return n;
   }
   function renderGoal() {
-    var c = store.days[dayKey()] || 0, g = store.settings.goal, el = $('goalMini');
-    el.textContent = c + '/' + g; el.classList.toggle('done', c >= g);
+    var c = store.days[dayKey()] || 0, g = store.settings.goal, x = $('goalMini');
+    x.textContent = c + '/' + g; x.classList.toggle('done', c >= g);
     var box = document.querySelector('.goal');
     if (box) {
-      box.querySelector('.gl').innerHTML = '오늘 목표 <b>' + c + '</b> / ' + g + (c >= g ? ' · 달성' : '');
+      box.querySelector('.gl').innerHTML = t('goal.today', b(c), g) + (c >= g ? ' · ' + t('goal.done') : '');
       box.querySelector('.gbar i').style.width = Math.min(100, c / g * 100) + '%';
-      box.querySelector('.gs').innerHTML = '연속 학습 <b>' + streakDays() + '</b>일';
+      box.querySelector('.gs').innerHTML = t('goal.streak', b(streakDays()));
     }
   }
 
   /* =========================================================
+     DAILY HAND + attendance streak
+     one deterministic composite hand per local date (E.dailyHand) → 5 steps
+     store.daily = { days:{key:{s,a}|{r:1}}, streak, best, last, cur:{k,a}, rep, total }
+     ========================================================= */
+  store.daily = Object.assign({ days: {}, streak: 0, best: 0, last: null, cur: null, rep: 0, total: 0 }, store.daily || {});
+  var DL = store.daily;
+  var FLAME = '<svg class="flame" viewBox="0 0 24 24" aria-hidden="true"><defs><linearGradient id="fg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#e07a3c"/><stop offset=".6" stop-color="#e8a24f"/><stop offset="1" stop-color="#f2cf7a"/></linearGradient></defs>' +
+    '<path class="fo" fill="url(#fg)" d="M12 1.8c.9 3.2-1.2 4.9-2.6 6.6-1.5 1.8-3.4 3.9-3.4 7.1A6 6 0 0 0 12 21.6a6 6 0 0 0 6-6.1c0-2.6-1.2-4.6-2.6-6.2-.2 1.6-1 2.8-2.2 3.2.6-3.5-.2-7-1.2-10.7z"/>' +
+    '<path class="fi" fill="#f7e2a6" d="M12.2 11.4c.3 1.6-.7 2.4-1.3 3.2-.5.6-.9 1.3-.9 2.2a2.1 2.1 0 0 0 4.2.1c0-1.4-.7-2.3-1.2-3 0 .5-.3 1-.7 1.2.2-1.3 0-2.5-.1-3.7z"/></svg>';
+  var MILESTONES = [3, 7, 14, 21, 30, 50, 75, 100, 150, 200, 365];
+  function dkOff(n) { var d = new Date(); d.setDate(d.getDate() + n); return dayKey(d); }
+  function nDays(n) { return t(n === 1 ? 'd.day1' : 'd.days', n); }
+  function bb(x) { return (Math.round(x * 10) / 10) % 1 ? (Math.round(x * 10) / 10).toFixed(1) : String(Math.round(x)); }
+  function streakNow() { return DL.last === dkOff(0) || DL.last === dkOff(-1) ? DL.streak : 0; }
+  function dailyDone(k) { var r = DL.days[k || dkOff(0)]; return !!(r && r.s !== undefined); }
+  function canRepair() { return DL.last === dkOff(-2) && DL.streak >= 2 && Date.now() - (DL.rep || 0) > 7 * 864e5; }
+  function doRepair() { var y = dkOff(-1); DL.days[y] = { r: 1 }; DL.last = y; DL.rep = Date.now(); save(); renderStreakChip(); }
+  function completeDaily(score, answers) {
+    var k = dkOff(0), from = streakNow(), oldBest = DL.best, fresh = DL.last !== k;
+    if (fresh) { DL.streak = DL.last === dkOff(-1) ? DL.streak + 1 : 1; DL.last = k; DL.total = (DL.total || 0) + 1; }
+    DL.best = Math.max(DL.best, DL.streak);
+    DL.days[k] = { s: score, a: answers }; DL.cur = null;
+    var ks = Object.keys(DL.days); if (ks.length > 90) ks.slice(0, ks.length - 90).forEach(function (x) { delete DL.days[x]; });
+    save(); renderStreakChip();
+    return { fresh: fresh, from: from, to: DL.streak, record: DL.streak > oldBest && DL.streak > 1, score: score };
+  }
+  function weekDots(anim) {
+    var fmt = null;
+    try { fmt = new Intl.DateTimeFormat(I.lang, { weekday: 'narrow' }); } catch (e) { fmt = null; }
+    var h = '<div class="wk' + (anim ? ' anim' : '') + '">';
+    for (var i = -6; i <= 0; i++) {
+      var d = new Date(); d.setDate(d.getDate() + i);
+      var k = dayKey(d), r = DL.days[k], cls = r && r.s !== undefined ? (r.s === 5 ? 'on pf' : 'on') : r && r.r ? 'rep' : i === 0 ? 'todo' : 'off';
+      h += '<div class="wd ' + cls + (i === 0 ? ' now' : '') + '" style="--i:' + (i + 6) + '"><i></i><span>' + (fmt ? fmt.format(d) : d.getDate()) + '</span></div>';
+    }
+    return h + '</div>';
+  }
+  function untilMidnight() {
+    var n = new Date(), m = new Date(n); m.setHours(24, 0, 0, 0);
+    var s = Math.max(0, Math.floor((m - n) / 1000)), hh = Math.floor(s / 3600), mm = Math.floor(s % 3600 / 60);
+    return hh + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+  function renderStreakChip() {
+    var c = $('streakChip'); if (!c) return;
+    var n = streakNow(), done = dailyDone();
+    c.classList.toggle('lit', done); c.classList.toggle('due', !done);
+    c.querySelector('span').textContent = n;
+    c.setAttribute('aria-label', t('d.chip', n));
+  }
+  function streakBlock() {
+    var n = streakNow(), done = dailyDone(), msg;
+    if (done) msg = t('d.done') + ' · <span class="d-next">' + t('d.next_in', untilMidnight()) + '</span>';
+    else if (n > 0) msg = t('d.keep', b(nDays(n + 1)));
+    else msg = DL.best > 0 ? t('d.broken') : t('d.sub');
+    return '<div class="d-streak' + (done ? ' lit' : '') + '"><div class="d-fl">' + FLAME + '</div><div class="d-sn"><b>' + n + '</b><span>' + t('d.streak') + '</span></div>' +
+      '<div class="d-sm"><span>' + t('d.best', nDays(DL.best)) + '</span><span>' + t('d.total', DL.total || 0) + '</span></div></div>' +
+      weekDots(false) + '<div class="d-msg">' + msg + '</div>';
+  }
+  function repairHtml() {
+    if (!canRepair() || dailyDone()) return '';
+    return '<div class="d-repair"><b>' + t('d.repair_t') + '</b><p>' + t('d.repair_p', DL.streak) + '</p><button type="button" class="ghost-btn d-rep">' + adLabel('d.repair_btn') + '</button></div>';
+  }
+  function wireRepair(root, after) {
+    var bt = root.querySelector('.d-rep'); if (!bt) return;
+    bt.addEventListener('click', function () {
+      bt.disabled = true; if (Ads.on) bt.textContent = t('ad.loading');
+      Ads.rewarded(function (ok) {
+        if (!ok) { bt.disabled = false; bt.textContent = t('ad.fail_retry'); return; }
+        doRepair(); after();
+      });
+    });
+  }
+  function dailyCardHtml() {
+    var k = dkOff(0), cur = DL.cur && DL.cur.k === k ? DL.cur.a.length : 0, done = dailyDone();
+    return '<div class="d-card"><div class="d-ch"><span class="en">DAILY</span><b>' + t('d.title') + '</b><small>' + t('d.sub') + '</small></div>' + streakBlock() + repairHtml() +
+      '<button type="button" class="' + (done ? 'ghost-btn' : 'primary') + ' d-go">' + (done ? t('d.view') : cur ? t('d.resume', cur) : t('d.start')) + '</button></div>';
+  }
+  function wireDailyCard(root, redraw) {
+    var g = root.querySelector('.d-go'); if (g) g.addEventListener('click', function () { go('daily'); });
+    wireRepair(root, redraw);
+  }
+
+  /* ---- the 5 steps ---- */
+  var DQ = null;
+  function dSteps(h) {
+    var fa = E.analyzeOuts(h.hole, h.flop);
+    var holeTxt = h.hole.map(function (c) { return mc(c); }).join('') + ' <span class="muted">(' + h.hk + ')</span>';
+    var later = h.heroIP ? h.hero : h.villain;
+    var w1 = Math.round(h.B1 / (h.P1 + h.B1) * 1000) / 10, w2 = Math.round(h.B1 / h.P1 * 1000) / 10;
+    return [
+      { title: t('d.s1'), input: 'choice',
+        q: h.kind === 'open' ? t('d.q_open', h.hero, holeTxt) + '<br><b>' + t('d.q_open_a') + '</b>'
+          : h.kind === 'bb' ? t('d.q_bb', h.villain, holeTxt) + '<br><b>' + t('d.q_bb_a') + '</b>'
+          : t('d.q_vs', h.villain, h.hero, holeTxt) + '<br><b>' + t('d.q_vs_a') + '</b>',
+        opts: h.kind === 'open' ? [['fold', act('fold')], ['open', act('open')]] : [['fold', act('fold')], ['call', act('call')], ['3bet', act('3bet')]],
+        txt: function (v) { return act(v); },
+        explain: function () {
+          var s, st, pr = h.pre || h.ans[0];
+          if (h.kind === 'open') {
+            if (pr === 'fold') { s = t('d.e_open_fold', b(h.hk), h.hero, f1(E.rangePct(h.hero)), E.firstOpenPos(h.hk)); st = t('d.story_fold_go', h.villain, bb(h.P1)); }
+            else { s = t('d.e_open', b(h.hk), h.hero, f1(E.rangePct(h.hero))) + (E.firstOpenPos(h.hk) === h.hero && h.hero !== 'UTG' ? ' ' + t('d.e_open_first', h.hero) : ''); st = t('d.story_open', h.villain, bb(h.P1)); }
+          } else if (h.kind === 'bb') {
+            if (pr === '3bet') { s = t('d.e_bb3', b(h.hk), h.villain); st = t('d.story_3bet', h.villain, bb(h.P1)); }
+            else { s = t('d.e_bb', h.villain, b(h.hk)); st = t('d.story_bb', bb(h.P1)); }
+          } else {
+            if (pr === '3bet') { s = t('d.e_vs_3bet', b(h.hk), h.villain); st = t('d.story_vs_3bet', h.villain, bb(h.P1)); }
+            else { s = t('d.e_vs_call', b(h.hk), h.villain); st = t('d.story_vs_call', bb(h.P1)); }
+          }
+          return note(s) + '<div class="d-story">' + st + '</div>';
+        } },
+      { title: t('d.s2'), input: 'choice', q: t('d.q_pos', b(h.hero), b(h.villain)), opts: [['IP', 'IP'], ['OOP', 'OOP']],
+        txt: function (v) { return v; },
+        explain: function () {
+          return '<div class="ord-row"><span class="ol">' + t('se.post') + '</span>' + POST_ORDER.map(function (s) {
+            return '<span class="' + (s === h.hero ? 'me' : s === h.villain ? 'vl' : 'dim') + '">' + s + '</span>';
+          }).join('<i>→</i>') + '</div>' + note(t('d.e_pos', POST_ORDER.join(' → '), b(later), b(h.heroIP ? 'IP' : 'OOP')));
+        } },
+      { title: t('d.s3'), input: 'outs', q: t('d.q_outs'), txt: function (v) { return t('u.cards', v); },
+        explain: function () { return outsBreakdown(fa); } },
+      { title: t('d.s4'), input: 'choice', q: t(h.heroIP ? 'd.q_need_ip' : 'd.q_need_oop', bb(h.P1), bb(h.B1)) + '<br><b>' + t('d.q_need_a') + '</b>',
+        opts: h.needOpts.map(function (x) { return [String(x), fmtPct(x) + '%']; }), cls: 'choices four',
+        txt: function (v) { return fmtPct(+v) + '%'; },
+        explain: function () {
+          return '<div class="formula">' + bb(h.B1) + ' ÷ (' + bb(h.P1) + ' + ' + bb(h.B1) + ' + ' + bb(h.B1) + ') = <span class="hl">' + fmtPct(h.need1) + '%</span></div>' +
+            note(t('d.e_need_trap', fmtPct(w1) + '%', fmtPct(w2) + '%')) + '<div class="d-story">' + t('d.story_call', bb(h.P2)) + '</div>';
+        } },
+      { title: t('d.s5'), input: 'choice', q: t(h.heroIP ? 'd.q_turn_ip' : 'd.q_turn_oop', mc(h.turn), h.outs, bb(h.P2), bb(h.B2)) + '<br><b>' + t('d.q_turn_a') + '</b>',
+        opts: [['fold', act('fold')], ['call', act('call')]], txt: function (v) { return act(v); },
+        explain: function () {
+          var ans = h.ans[4];
+          return '<div class="formula">' + bb(h.B2) + ' ÷ (' + bb(h.P2) + ' + ' + bb(h.B2) + ' + ' + bb(h.B2) + ') = <span class="wa">' + f1(h.need2) + '%</span></div>' +
+            '<div class="formula">' + h.outs + ' × 2 = ' + h.eq2 + '% ' + (ans === 'call' ? '&gt;' : '&lt;') + ' ' + f1(h.need2) + '% → <span class="' + (ans === 'call' ? 'hl' : 'bd') + '">' + act(ans) + '</span></div>' +
+            note(t('d.e_turn', h.outs, h.eq2, f1(h.need2) + '%', b(act(ans)))) +
+            '<div class="d-story">' + t(h.riverHit ? 'd.river_hit' : 'd.river_miss', mc(h.river)) + '</div>' + note(t('d.river_note'));
+        } }
+    ];
+  }
+  function dJudge(h, i, v) { return String(v) === String(h.ans[i]); }
+  function dTable(h, stage, done) {
+    var board = stage >= 2 ? h.flop.slice() : [];
+    if (stage >= 4) board.push(h.turn);
+    if (done) board.push(h.river);
+    var slots = []; for (var i = board.length; i < 5; i++) slots.push(i < 3 ? 'FLOP' : i === 3 ? 'TURN' : 'RIVER');
+    var lab = done ? 'RIVER' : stage >= 4 ? 'TURN · POT ' + bb(h.P2) + 'BB' : stage >= 2 ? 'FLOP · POT ' + bb(h.P1) + 'BB' : 'PREFLOP · ' + h.hero + ' vs ' + h.villain;
+    var p = panel(lab, [el('div', 'row-label', 'BOARD'), cardRow('board', board, {}, slots), el('div', 'row-label', 'HERO · ' + h.hero), cardRow('hole', h.hole, {})]);
+    if (stage < 2) {
+      var hi = SEATS.indexOf(h.hero);
+      p.appendChild(el('div', 'seats s7', SEATS.map(function (s, i) {
+        var cls = '', sub = '';
+        if (s === h.hero) { cls = 'me'; sub = 'YOU'; }
+        else if (h.kind !== 'open' && s === h.villain) { cls = 'opener'; sub = 'RAISE'; }
+        else if (h.kind === 'bb' || i < hi) { cls = 'folded'; sub = 'FOLD'; }
+        else sub = t('seat.wait');
+        return '<div class="seat ' + cls + '">' + s + '<small>' + sub + '</small></div>';
+      }).join('')));
+    }
+    return p;
+  }
+  function renderDaily() {
+    var k = dkOff(0);
+    if (!DQ || DQ.k !== k) {
+      var rec = DL.days[k], a = rec && rec.a ? rec.a.slice() : DL.cur && DL.cur.k === k ? DL.cur.a.slice() : [];
+      DQ = { k: k, h: E.dailyHand(k), a: a, stage: a.length, fx: null };
+    }
+    drawDaily();
+  }
+  function drawDaily() {
+    var root = $('daily'), h = DQ.h, steps = dSteps(h), done = DQ.a.length >= 5 && dailyDone(DQ.k);
+    var date = DQ.k; try { date = new Intl.DateTimeFormat(I.lang, { month: 'long', day: 'numeric', weekday: 'short' }).format(new Date()); } catch (e) { /* keep */ }
+    root.innerHTML = '';
+    var head = el('div', 'd-head', '<div class="d-ch"><span class="en">DAILY · ' + date + '</span><b>' + t('d.title') + '</b><small>' + t('d.same') + '</small></div>' +
+      '<div class="d-prog">' + steps.map(function (s, i) {
+        var cls = i < DQ.a.length ? (dJudge(h, i, DQ.a[i]) ? 'ok' : 'ng') : i === DQ.stage ? 'cur' : '';
+        return '<div class="' + cls + '"><i></i><span>' + s.title + '</span></div>';
+      }).join('') + '</div>');
+    root.appendChild(head);
+    root.appendChild(dTable(h, Math.min(DQ.stage, 4), done));
+    for (var i = 0; i < steps.length && i <= DQ.stage; i++) {
+      var s = steps[i], answered = i < DQ.a.length;
+      var card = el('div', 'd-step' + (answered ? ' answered' : ' active'));
+      card.innerHTML = '<div class="step-h"><span class="i">0' + (i + 1) + '</span><span class="t">' + s.title + '</span></div><div class="d-q">' + s.q + '</div>';
+      root.appendChild(card);
+      if (answered) {
+        var v = DQ.a[i], ok = dJudge(h, i, v);
+        if (s.input === 'choice') {
+          var ch = choices(s.opts, s.cls || (s.opts.length === 2 ? 'choices two' : 'choices three'), { onReady: function () {} });
+          ch.lock([String(h.ans[i])], String(v)); card.appendChild(ch.el);
+        } else {
+          card.appendChild(el('div', 'd-outs-ans', '<span class="' + (ok ? 'y' : 'n') + '">' + t('v.mine', s.txt(v)) + '</span>'));
+        }
+        card.appendChild(el('div', 'explain d-ex', verdictHtml({ ok: ok, correctTxt: s.txt(h.ans[i]), mineTxt: ok ? '' : s.txt(v) }) + '<div class="step">' + s.explain() + '</div>'));
+      } else {
+        activeStep(card, s, i);
+      }
+    }
+    if (DQ.a.length > DQ.stage) {
+      var nx = el('button', 'primary', t('d.next_step')); nx.type = 'button';
+      nx.addEventListener('click', function () { DQ.stage = DQ.a.length; drawDaily(); var a = document.querySelector('.d-step.active'); if (a) a.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      root.appendChild(nx);
+    }
+    if (done) root.appendChild(resultBlock());
+    updateBanner();
+  }
+  function activeStep(card, s, i) {
+    var btn = el('button', 'primary', t('btn.check')); btn.type = 'button'; btn.disabled = true;
+    var ctrl;
+    if (s.input === 'choice') {
+      ctrl = choices(s.opts, s.cls || (s.opts.length === 2 ? 'choices two' : 'choices three'), { onReady: function (r) { btn.disabled = !r; } });
+    } else {
+      ctrl = stepper(0, 25, true, function () { btn.disabled = false; });
+      var f = el('div', 'field'); f.appendChild(ctrl.el); card.appendChild(f);
+    }
+    if (s.input === 'choice') card.appendChild(ctrl.el);
+    card.appendChild(btn);
+    btn.addEventListener('click', function () {
+      var v = ctrl.val(); if (v === null || v === undefined) return;
+      DQ.a.push(s.input === 'outs' ? +v : String(v));
+      var dk = dayKey(); store.days[dk] = (store.days[dk] || 0) + 1; renderGoal();
+      if (DQ.a.length >= 5) {
+        var score = 0; DQ.a.forEach(function (x, j) { if (dJudge(DQ.h, j, x)) score++; });
+        DQ.fx = completeDaily(score, DQ.a.slice());
+        DQ.stage = 5;
+      } else { DL.cur = { k: DQ.k, a: DQ.a.slice() }; save(); }
+      drawDaily();
+      var last = document.querySelectorAll('.d-step')[i];
+      if (last) setTimeout(function () { last.querySelector('.d-ex').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+      if (DQ.fx && DQ.fx.fresh) { var r = DQ.fx; DQ.fx = null; setTimeout(function () { streakFx(r); }, 650); }
+    });
+  }
+  function resultBlock() {
+    var h = DQ.h, steps = dSteps(h), rec = DL.days[DQ.k], sc = rec ? rec.s : 0;
+    var box = el('div', 'd-result', '<div class="d-rh">' + t('d.res_h') + '</div><div class="d-score"><b>' + sc + '</b><span>/5</span>' + (sc === 5 ? '<em>' + t('d.perfect') + '</em>' : '') + '</div>' +
+      '<div class="d-marks">' + steps.map(function (s, i) { var ok = dJudge(h, i, DQ.a[i]); return '<div class="' + (ok ? 'ok' : 'ng') + '"><b>' + (ok ? '✓' : '✗') + '</b><span>' + s.title + '</span></div>'; }).join('') + '</div>' +
+      streakBlock());
+    return box;
+  }
+  function streakFx(r) {
+    closeFx();
+    var ms = MILESTONES.indexOf(r.to) >= 0, sparks = '';
+    for (var i = 0; i < 14; i++) sparks += '<i style="--a:' + Math.round(i * 360 / 14 + (i % 2) * 9) + 'deg;--d:' + (54 + (i % 3) * 14) + 'px"></i>';
+    var o = el('div', 'sfx' + (ms ? ' ms' : '') + (r.score === 5 ? ' pf' : ''));
+    o.innerHTML = '<div class="sfx-card"><div class="sfx-fl"><div class="sp">' + sparks + '</div><div class="glow"></div>' + FLAME + '</div>' +
+      '<div class="sfx-num"><span class="o">' + r.from + '</span><span class="n">' + r.to + '</span></div>' +
+      '<div class="sfx-t">' + (r.to === 1 ? t('d.fx_first') : t('d.fx_n', r.to)) + '</div>' +
+      (ms ? '<div class="sfx-ms">' + t('d.fx_ms', r.to) + '</div>' : r.record ? '<div class="sfx-ms">' + t('d.fx_record') + '</div>' : '') +
+      (r.score === 5 ? '<div class="sfx-pf">' + t('d.perfect') + ' 5/5</div>' : '') +
+      weekDots(true) + '<small>' + t('d.fx_tap') + '</small></div>';
+    document.body.appendChild(o);
+    void o.offsetWidth; o.classList.add('in');
+    o.addEventListener('click', closeFx);
+  }
+  function closeFx() {
+    var o = document.querySelector('.sfx'); if (!o) return false;
+    o.classList.remove('in'); o.classList.add('out');
+    setTimeout(function () { if (o.parentNode) o.parentNode.removeChild(o); }, 260);
+    return true;
+  }
+  setInterval(function () {
+    var n = document.querySelectorAll('.d-next');
+    for (var i = 0; i < n.length; i++) n[i].textContent = t('d.next_in', untilMidnight());
+    if (DQ && DQ.k !== dkOff(0)) { renderStreakChip(); if (activeTab === 'daily') renderDaily(); }
+  }, 30000);
+
+  /* =========================================================
      Tabs / back button / boot
      ========================================================= */
+  I.applyStatic();
   var practice = {};
-  TYPES.forEach(function (t) { practice[t] = Practice(t); });
+  TYPES.forEach(function (k) { practice[k] = Practice(k); });
   var prevTab = 'pot';
   function go(tab) {
-    if (tab === 'guide' && activeTab !== 'guide') prevTab = activeTab;
+    if ((tab === 'guide' || tab === 'daily') && activeTab !== 'guide' && activeTab !== 'daily') prevTab = activeTab;
     activeTab = tab;
     $('guideBtn').classList.toggle('on', tab === 'guide');
     if (tab === 'guide' && !guideBuilt) buildGuide();
     document.querySelectorAll('.tab').forEach(function (s) { s.classList.toggle('active', s.getAttribute('data-tab') === tab); });
-    document.querySelectorAll('#tabs button').forEach(function (b) { b.classList.toggle('active', b.getAttribute('data-go') === tab); });
-    if (tab !== 'guide') { store.settings.tab = tab; save(); }
+    document.querySelectorAll('#tabs button').forEach(function (bt) { bt.classList.toggle('active', bt.getAttribute('data-go') === tab); });
+    if (tab !== 'guide' && tab !== 'daily') { store.settings.tab = tab; save(); }
+    $('streakChip').classList.toggle('on', tab === 'daily');
     if (tab !== 'ch' || !run) window.scrollTo(0, 0);
     $('fb').style.display = tab === 'ch' ? '' : 'none';
     if (tab === 'ch') { if (!run && $('chEnd').hidden) { $('chHome').hidden = false; renderHome(); } }
+    else if (tab === 'daily') renderDaily();
     else if (tab !== 'guide') practice[tab].start();
     if (run && run.phase === 'answer') run.last = performance.now();
+    updateBanner();
   }
   $('tabs').addEventListener('click', function (e) {
-    var b = e.target.closest('button'); if (b) go(b.getAttribute('data-go'));
+    var bt = e.target.closest('button'); if (bt) go(bt.getAttribute('data-go'));
   });
   // Android back key (called from MainActivity): true = handled in-app, false = exit
   window.__onBack = function () {
-    if (activeTab === 'guide') { go(prevTab); return true; }
+    if (closeFx()) return true;
+    if (activeTab === 'guide' || activeTab === 'daily') { go(prevTab); return true; }
     if (activeTab === 'ch' && run) { abortRun(); return true; }
     if (activeTab === 'ch' && !$('chEnd').hidden) { abortRun(); return true; }
     if (activeTab !== 'pot') { go('pot'); return true; }
@@ -1639,12 +1991,12 @@
     var box = $('posKinds');
     function draw() {
       box.innerHTML = ['mix', 'vs', 'bb', 'post', 'concept'].map(function (k) {
-        return '<button type="button" data-k="' + k + '" class="' + (store.settings.posKind === k ? 'on' : '') + '">' + (k === 'mix' ? '전체' : POS_KINDS[k]) + '</button>';
+        return '<button type="button" data-k="' + k + '" class="' + (store.settings.posKind === k ? 'on' : '') + '">' + (k === 'mix' ? t('c.all') : posKind(k)) + '</button>';
       }).join('');
     }
     box.addEventListener('click', function (e) {
-      var b = e.target.closest('button'); if (!b) return;
-      store.settings.posKind = b.getAttribute('data-k'); save(); draw();
+      var bt = e.target.closest('button'); if (!bt) return;
+      store.settings.posKind = bt.getAttribute('data-k'); save(); draw();
       practice.pos.restart();
     });
     draw();
@@ -1654,6 +2006,8 @@
   }
   TYPES.forEach(renderStats);
   $('guideBtn').addEventListener('click', function () { if (activeTab === 'guide') go(prevTab); else go('guide'); });
+  $('streakChip').addEventListener('click', function () { if (activeTab === 'daily') go(prevTab); else go('daily'); });
+  renderStreakChip();
   renderGoal();
   renderChAcc();
   go(TYPES.concat(['ch']).indexOf(store.settings.tab) >= 0 ? store.settings.tab : 'pot');

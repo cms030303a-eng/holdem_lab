@@ -1,8 +1,8 @@
 {
-  "name": "홀덤 랩 — Holdem Lab",
-  "short_name": "홀덤 랩",
-  "description": "텍사스 홀덤 팟 오즈·아웃츠·레인지 트레이닝",
-  "lang": "ko",
+  "name": "Holdem Lab",
+  "short_name": "Holdem Lab",
+  "description": "Texas Hold’em trainer — pot odds, outs, ranges, matchups",
+  "lang": "en",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

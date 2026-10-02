@@ -173,7 +173,7 @@
     var brd = straightHigh(rankMask(board.concat([u])));
     return hero >= 0 && hero > brd;
   }
-  var OUT_GROUPS = ['플러시', '스트레이트', '풀하우스·포카드', '셋', '트리플', '투페어', '오버카드→탑페어'];
+  var OUT_GROUPS = ['flush', 'straight', 'fh', 'set', 'trips', 'twopair', 'over'];   // labels: i18n 'og.<id>'
   function analyzeOuts(hole, board) {
     var known = hole.concat(board), seen = {}, i;
     known.forEach(function (c) { seen[c] = 1; });
@@ -192,15 +192,15 @@
       if (nc <= curCat) continue;
       if (nw <= evaluate(board.concat([i]))) continue;           // board plays
       var r = rankOf(i), holeRank = r === h0 || r === h1, g = null;
-      if (nc >= 6) g = '풀하우스·포카드';
-      else if (nc === 5 || nc === 8) g = f ? '플러시' : null;
-      else if (nc === 4) g = st ? '스트레이트' : null;
+      if (nc === 6 || nc === 7) g = 'fh';
+      else if (nc === 5 || nc === 8) g = f ? 'flush' : null;
+      else if (nc === 4) g = st ? 'straight' : null;
       else if (holeRank) {
-        if (nc === 3) g = pocket ? '셋' : '트리플';
-        else if (nc === 2) g = '투페어';
-        else if (nc === 1 && r > boardMax) g = '오버카드→탑페어';
+        if (nc === 3) g = pocket ? 'set' : 'trips';
+        else if (nc === 2) g = 'twopair';
+        else if (nc === 1 && r > boardMax) g = 'over';
       }
-      if (nc === 8 && !g) g = '플러시';
+      if (nc === 8 && !g) g = 'flush';
       if (g) { groups[g].push(i); all.push(i); }
     }
     var unseen = 52 - known.length;
@@ -208,20 +208,20 @@
     var n = all.length;
     var rule = n * (cardsToCome === 2 ? 4 : 2);
     var exact = cardsToCome === 2 ? 1 - ((unseen - n) * (unseen - n - 1)) / (unseen * (unseen - 1)) : n / unseen;
-    // draw labels
+    // draw labels (ids → i18n 'dr.<id>')
     var draws = [];
-    if (groups['플러시'].length) draws.push('플러시 드로우');
+    if (groups.flush.length) draws.push('fd');
     var strRanks = {};
     straight.forEach(function (c) { strRanks[c >> 2] = 1; });
     var nRanks = Object.keys(strRanks).length;
-    if (nRanks >= 2) draws.push(isOESD(hole, board) ? '양방 스트레이트 드로우' : '더블 거트샷');
-    else if (nRanks === 1) draws.push('거트샷');
-    var overRanks = {}; groups['오버카드→탑페어'].forEach(function (c) { overRanks[rankOf(c)] = 1; });
+    if (nRanks >= 2) draws.push(isOESD(hole, board) ? 'oesd' : 'dgs');
+    else if (nRanks === 1) draws.push('gs');
+    var overRanks = {}; groups.over.forEach(function (c) { overRanks[rankOf(c)] = 1; });
     var nOver = Object.keys(overRanks).length;
-    if (nOver) draws.push('오버카드 ' + nOver + '장');
-    if (groups['셋'].length) draws.push('포켓페어 → 셋');
-    if (groups['트리플'].length || groups['투페어'].length) draws.push(curCat === 2 ? '투페어 개선' : '원페어 → 투페어·트리플');
-    if (groups['풀하우스·포카드'].length) draws.push(curCat === 2 ? '투페어 → 풀하우스' : '셋·트리플 → 풀하우스·포카드');
+    if (nOver) draws.push('over' + nOver);
+    if (groups.set.length) draws.push('pp2set');
+    if (groups.trips.length || groups.twopair.length) draws.push(curCat === 2 ? 'tp_up' : 'pair_up');
+    if (groups.fh.length) draws.push(curCat === 2 ? 'tp2fh' : 'set2fh');
     return {
       groups: groups, flush: flush, straight: straight, both: both, outs: all, count: n,
       cardsToCome: cardsToCome, unseen: unseen, curCat: curCat, nOver: nOver,
@@ -239,7 +239,8 @@
 
   /* scenario validity
      mode 'pot'  : hero is behind-ish — high card, or a pair below the top board card (middle/bottom pair, underpair)
-     mode 'outs' : anything up to trips/set (no made straight+) */
+     mode 'outs' : same 'behind' rule, but 2+ outs allowed (e.g. underpair → set)
+     mode 'any'  : anything up to trips/set (unused) */
   function validDrawSpot(hole, board, mode) {
     var bm = rankMask(board);
     if (countBits(bm) !== board.length) return false;                // board unpaired
@@ -249,7 +250,7 @@
     }
     var cat = category(evaluate(hole.concat(board)));
     var boardMax = -1; board.forEach(function (c) { boardMax = Math.max(boardMax, rankOf(c)); });
-    if (mode === 'pot' || mode === 'post') {
+    if (mode !== 'any') {                                           // hero must be behind a top-pair hand
       if (cat > 1) return false;
       if (cat === 1) {
         var pr = rankOf(hole[0]) === rankOf(hole[1]) ? rankOf(hole[0]) : ((bm & (1 << rankOf(hole[0]))) ? rankOf(hole[0]) : rankOf(hole[1]));
@@ -412,6 +413,87 @@
     return out;
   }
 
+  /* ---------- daily hand (deterministic per date: same hand for everyone that day) ----------
+     5 steps: preflop decision → postflop position → flop outs → required equity → turn call/fold */
+  function hashStr(str) { var h = 2166136261; for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+  function mulberry32(a) {
+    return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var x = Math.imul(a ^ a >>> 15, 1 | a); x = x + Math.imul(x ^ x >>> 7, 61 | x) ^ x; return ((x ^ x >>> 14) >>> 0) / 4294967296; };
+  }
+  function half(x) { return Math.max(1, Math.round(x * 2) / 2); }
+  function dailyHand(key) {
+    var R = mulberry32(hashStr('holdemlab-daily:' + key));
+    function P(arr) { return arr[Math.floor(R() * arr.length)]; }
+    function shuffleR(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(R() * (i + 1)); var t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
+    for (var tries = 0; tries < 500; tries++) {
+      var x = R(), kind = x < 0.5 ? 'open' : x < 0.8 ? 'bb' : 'vs', hero, villain, keys, pre;
+      var np = function (k) { return k.length === 3; };
+      if (kind === 'open') {
+        hero = P(POSITIONS);
+        villain = P(SEATS.slice(SEATS.indexOf(hero) + 1));
+        pre = 'open';
+        keys = Object.keys(RANGES[hero]).filter(np);
+        if (hero !== 'BTN' && R() < 0.25) {
+          var outside = {};
+          POSITIONS.slice(POSITIONS.indexOf(hero) + 1).forEach(function (q) { Object.keys(RANGES[q]).forEach(function (k) { if (!RANGES[hero][k] && np(k)) outside[k] = 1; }); });
+          keys = Object.keys(outside); pre = 'fold';
+        } else {
+          var fresh = keys.filter(function (k) { return firstOpenPos(k) === hero; });
+          if (fresh.length && R() < 0.7) keys = fresh;
+        }
+      } else {
+        if (kind === 'bb') { villain = P(POSITIONS); hero = 'BB'; }
+        else { villain = P(['UTG', 'MP', 'HJ', 'CO']); hero = P(SEATS.slice(SEATS.indexOf(villain) + 1, 5)); }
+        var tb = VS_OPEN[villain + '>' + vsGroup(hero)], ipT = VS_OPEN[villain + '>IP'] || { c: {}, r: {} };
+        var rk = Object.keys(tb.r).filter(np);
+        if (rk.length && R() < 0.25) { keys = rk; pre = '3bet'; }
+        else {
+          pre = 'call'; keys = Object.keys(tb.c).filter(np);
+          if (kind === 'bb') { var wide = keys.filter(function (k) { return !ipT.c[k] && !ipT.r[k]; }); if (wide.length && R() < 0.6) keys = wide; }
+        }
+      }
+      if (!keys.length) continue;
+      var hk = P(keys), hi = ri(hk[0]), lo = ri(hk[1]), s1 = Math.floor(R() * 4);
+      var s2 = hk[2] === 's' ? s1 : (s1 + 1 + Math.floor(R() * 3)) % 4;
+      var hole = [hi * 4 + s1, lo * 4 + s2];
+      var rest = []; for (var c = 0; c < 52; c++) if (c !== hole[0] && c !== hole[1]) rest.push(c);
+      var flop = null, fa = null;
+      for (var f = 0; f < 80 && !flop; f++) {
+        shuffleR(rest);
+        var fl = rest.slice(0, 3), a = validDrawSpot(hole, fl, 'pot');
+        if (a && a.count >= 6 && a.count <= 15 && (a.count >= 8 || R() < 0.35)) { flop = fl; fa = a; }
+      }
+      if (!flop) continue;
+      var left = rest.filter(function (x) { return flop.indexOf(x) < 0 && fa.outs.indexOf(x) < 0; });
+      var turns = left.filter(function (x) { var a4 = validDrawSpot(hole, flop.concat([x]), 'pot'); return a4 && a4.count === fa.count; });
+      if (!turns.length) continue;
+      var turn = P(turns), board4 = flop.concat([turn]), ta = analyzeOuts(hole, board4);
+      var river = P(rest.filter(function (x) { return board4.indexOf(x) < 0; }));
+      var heroIP = kind === 'vs' || (kind === 'open' && (villain === 'SB' || villain === 'BB'));
+      var P1 = kind === 'bb' ? (pre === '3bet' ? 22.5 : 5.5) : kind === 'vs' ? (pre === '3bet' ? 17.5 : 6.5) : villain === 'BB' ? 5.5 : villain === 'SB' ? 6 : 6.5;
+      var B1 = half(P1 * P([0.33, 0.5, 0.66, 0.75]));
+      var need1 = B1 / (P1 + 2 * B1) * 100;
+      var wrong = [B1 / (P1 + B1) * 100, B1 / P1 * 100, 2 * B1 / (P1 + 2 * B1) * 100];
+      var opts = [need1].concat(wrong).map(function (x) { return Math.round(x * 10) / 10; });
+      var distinct = opts.every(function (x, i) { return opts.every(function (y, j) { return i === j || Math.abs(x - y) >= 2; }); });
+      if (!distinct) continue;
+      var P2 = P1 + 2 * B1, eq2 = ta.rulePct, target = R() < 0.5 ? 'call' : 'fold';
+      var cands = [0.2, 0.25, 0.33, 0.5, 0.66, 0.75, 1].map(function (fr) { var bb = half(P2 * fr); return { b: bb, need: bb / (P2 + 2 * bb) * 100 }; })
+        .filter(function (x) { return Math.abs(eq2 - x.need) >= 3; });
+      var pref = cands.filter(function (x) { return (eq2 > x.need) === (target === 'call'); });
+      if (!cands.length) continue;
+      var m = P(pref.length ? pref : cands);
+      var order = shuffleR([0, 1, 2, 3]);
+      return {
+        key: key, kind: kind, hero: hero, villain: villain, hk: hk, hole: hole, flop: flop, turn: turn, river: river,
+        heroIP: heroIP, P1: P1, B1: B1, need1: opts[0], needOpts: order.map(function (i) { return opts[i]; }),
+        P2: P2, B2: m.b, need2: m.b / (P2 + 2 * m.b) * 100, outs: fa.count, eq2: eq2, riverHit: ta.outs.indexOf(river) >= 0,
+        pre: pre,
+        ans: [pre, heroIP ? 'IP' : 'OOP', fa.count, String(opts[0]), eq2 > m.b / (P2 + 2 * m.b) * 100 ? 'call' : 'fold']
+      };
+    }
+    return null;
+  }
+
   var api = {
     RANKS: RANKS, SUITS: SUITS, SUIT_SYM: SUIT_SYM, CAT_KO: CAT_KO,
     rankOf: rankOf, suitOf: suitOf, cardFromCode: cardFromCode, codeOf: codeOf, apiCodeOf: apiCodeOf, labelOf: labelOf,
@@ -421,7 +503,7 @@
     POSITIONS: POSITIONS, RANGE_TEXT: RANGE_TEXT, RANGES: RANGES, handKey: handKey, handKeyOf: handKeyOf,
     parseRange: parseRange, rangePct: rangePct, firstOpenPos: firstOpenPos, combosOf: combosOf,
     equitySim: equitySim, equitySync: equitySync, equityBoard: equityBoard,
-    SEATS: SEATS, VS_OPEN_TEXT: VS_OPEN_TEXT, VS_OPEN: VS_OPEN, vsGroup: vsGroup, vsOpenAction: vsOpenAction, setPct: setPct
+    SEATS: SEATS, VS_OPEN_TEXT: VS_OPEN_TEXT, VS_OPEN: VS_OPEN, vsGroup: vsGroup, vsOpenAction: vsOpenAction, setPct: setPct, dailyHand: dailyHand
   };
   root.Engine = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

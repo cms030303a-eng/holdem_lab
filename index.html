@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="홀덤 랩">
+<meta name="apple-mobile-web-app-title" content="Holdem Lab">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
@@ -17,7 +17,7 @@
 <body>
 <header class="top">
   <div class="brand"><span class="brand-mark">HOLDEM</span><span class="brand-sub">LAB</span></div>
-  <div class="top-r"><span class="goal-mini" id="goalMini">0/30</span><div class="deck-src" id="deckSrc"><i></i><span>—</span></div><button type="button" class="guide-btn" id="guideBtn">가이드</button></div>
+  <div class="top-r"><button type="button" class="streak-chip" id="streakChip"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1.8c.9 3.2-1.2 4.9-2.6 6.6-1.5 1.8-3.4 3.9-3.4 7.1A6 6 0 0 0 12 21.6a6 6 0 0 0 6-6.1c0-2.6-1.2-4.6-2.6-6.2-.2 1.6-1 2.8-2.2 3.2.6-3.5-.2-7-1.2-10.7z"/></svg><span>0</span></button><span class="goal-mini" id="goalMini">0/30</span><div class="deck-src" id="deckSrc"><i></i><span>—</span></div><button type="button" class="guide-btn" id="guideBtn" data-i18n="hdr.guide">가이드</button></div>
 </header>
 
 <main id="main">
@@ -53,6 +53,7 @@
     <div class="explain" hidden></div>
   </section>
   <section class="tab" id="tab-guide" data-tab="guide"><div id="guide"></div></section>
+  <section class="tab" id="tab-daily" data-tab="daily"><div id="daily"></div></section>
   <section class="tab" id="tab-ch" data-tab="ch">
     <div id="chHome"></div>
     <div id="chRun" hidden></div>
@@ -63,15 +64,16 @@
 <div id="fb" class="fb" hidden></div>
 
 <nav class="tabs" id="tabs">
-  <button type="button" data-go="pot"><span class="n">01</span><span class="t">팟 오즈</span><span class="acc" data-acc="pot">–</span></button>
-  <button type="button" data-go="outs"><span class="n">02</span><span class="t">아웃츠</span><span class="acc" data-acc="outs">–</span></button>
-  <button type="button" data-go="pre"><span class="n">03</span><span class="t">프리플랍</span><span class="acc" data-acc="pre">–</span></button>
-  <button type="button" data-go="pos"><span class="n">04</span><span class="t">포지션</span><span class="acc" data-acc="pos">–</span></button>
-  <button type="button" data-go="mu"><span class="n">05</span><span class="t">매치업</span><span class="acc" data-acc="mu">–</span></button>
-  <button type="button" data-go="ch"><span class="n">06</span><span class="t">챌린지</span><span class="acc" data-acc="ch">–</span></button>
+  <button type="button" data-go="pot"><span class="n">01</span><span class="t" data-i18n="tab.pot">팟 오즈</span><span class="acc" data-acc="pot">–</span></button>
+  <button type="button" data-go="outs"><span class="n">02</span><span class="t" data-i18n="tab.outs">아웃츠</span><span class="acc" data-acc="outs">–</span></button>
+  <button type="button" data-go="pre"><span class="n">03</span><span class="t" data-i18n="tab.pre">프리플랍</span><span class="acc" data-acc="pre">–</span></button>
+  <button type="button" data-go="pos"><span class="n">04</span><span class="t" data-i18n="tab.pos">포지션</span><span class="acc" data-acc="pos">–</span></button>
+  <button type="button" data-go="mu"><span class="n">05</span><span class="t" data-i18n="tab.mu">매치업</span><span class="acc" data-acc="mu">–</span></button>
+  <button type="button" data-go="ch"><span class="n">06</span><span class="t" data-i18n="tab.ch">챌린지</span><span class="acc" data-acc="ch">–</span></button>
 </nav>
 
 <script src="engine.js"></script>
+<script src="i18n.js"></script>
 <script src="guide.js"></script>
 <script src="app.js"></script>
 </body>

@@ -1,8 +1,8 @@
 /* Holdem Lab service worker — 앱 파일을 저장해 오프라인에서도 열리게 함.
    파일을 고친 뒤 다시 올릴 때는 아래 VERSION을 바꾸세요. */
-var VERSION = 'holdemlab-1.5.0';
+var VERSION = 'holdemlab-1.9.0';
 var SHELL = [
-  './', 'index.html', 'app.css', 'app.js', 'engine.js', 'guide.js', 'manifest.webmanifest',
+  './', 'index.html', 'privacy.html', 'app.css', 'app.js', 'engine.js', 'i18n.js', 'guide.js', 'manifest.webmanifest',
   'fonts/IBMPlexMono-Regular-Latin1.woff2', 'fonts/IBMPlexMono-Medium-Latin1.woff2', 'fonts/IBMPlexMono-SemiBold-Latin1.woff2',
   'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'
 ];
